@@ -1,8 +1,8 @@
 ### static-content-migrator
 
-A services which uploads static content from a Zebedee collection.  
+A service which uploads static content from a Zebedee collection.
 
-Messages are send via kafka topic. Example of messages
+Messages are sent via a kafka topic. Example of messages:
 ```
 {"collectionId":"test-0001","encryptionKey":"2iyOwMI3YF+fF+SDqMlD8Q=="}
 {"collectionId":"test0002","encryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow=="}
