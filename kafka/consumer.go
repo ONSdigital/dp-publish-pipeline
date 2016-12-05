@@ -25,6 +25,7 @@ func CreateConsumer() sarama.Consumer {
 
 func ProcessMessages(master sarama.Consumer, topic string, callback ConsumerCallback) {
 	consumer, err := master.ConsumePartition(topic, 0, sarama.OffsetNewest)
+	defer consumer.Close()
 	if err != nil {
 		panic(err)
 	}
@@ -46,5 +47,4 @@ func ProcessMessages(master sarama.Consumer, topic string, callback ConsumerCall
 		}
 	}()
 	<-messageChannel
-	consumer.Close()
 }

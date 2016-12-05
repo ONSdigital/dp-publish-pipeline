@@ -1,3 +1,4 @@
 .DS_STORE
 debug
 static-content-migrator/static-content-migrator
+publish-receiver/publish-receiver
