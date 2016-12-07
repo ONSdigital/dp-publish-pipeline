@@ -18,5 +18,4 @@ Test data examples
 * Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```
 * Install docker
 * Run ```docker run --name website-mongo -p 27017:27017 mongo --storageEngine wiredTiger```
-* To inspect mongo use ```
-```
+* To inspect mongo use ```docker run -it --link website-mongo:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/ONSWebsite"'```
