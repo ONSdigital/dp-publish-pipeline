@@ -5,8 +5,8 @@ the ONS website. Each page is stored in a mongodb collection
 
 Test data examples
 ```
-{ "fileLocation": "/about/data.json", "FileContent":"1234353453"}
-{ "fileLocation": "/releases/newpage/data.json", "FileContent":"1234353453"}
+{ "collectionId":"test-0001", "fileLocation": "/about/data.json", "FileContent":"1234353453"}
+{ "collectionId":"test-0002", "fileLocation": "/releases/newpage/data.json", "FileContent":"1234353453"}
 ```
 #### Environment variables
 * MONGODB defaults to localhost

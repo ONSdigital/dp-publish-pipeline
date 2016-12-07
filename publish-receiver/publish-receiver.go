@@ -13,6 +13,7 @@ import (
 type DataSet struct {
 	FileLocation string
 	FileContent  string
+	CollectionId string
 }
 
 func storeData(jsonMessage []byte) {
@@ -30,7 +31,7 @@ func storeData(jsonMessage []byte) {
 		// Try to update the existing document. The Mongo driver sets keys to be
 		// all lower case.
 		query := bson.M{"filelocation": dataSet.FileLocation}
-		change := bson.M{ "$set": bson.M{"filecontent": dataSet.FileContent}}
+		change := bson.M{"$set": bson.M{"filecontent": dataSet.FileContent, "collecionid": dataSet.CollectionId}}
 		updateErr := collection.Update(query, change)
 		if updateErr != nil {
 			// No document existed so this must be a new page
