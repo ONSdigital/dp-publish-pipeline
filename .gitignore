@@ -2,3 +2,4 @@
 debug
 static-content-migrator/static-content-migrator
 publish-receiver/publish-receiver
+publish-sender/publish-sender
