@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"os"
-	"path/filepath"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type DataSet struct {
@@ -21,24 +21,26 @@ func storeData(jsonMessage []byte) {
 	if err != nil {
 		log.Printf("Failed to parse json message")
 	} else {
-		rootDirectory := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", ".")
-		path := filepath.Join(rootDirectory, dataSet.FileLocation)
-		dirErr := os.MkdirAll(filepath.Dir(path), 0774) // Read + Exec
-		if dirErr == nil {
-			fileHandle, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0744)
-			defer fileHandle.Close()
-			if err == nil {
-				_, writeErr := fileHandle.WriteString(dataSet.FileContent)
-				if writeErr == nil {
-					log.Printf("Written file at %s", path)
-				} else {
-					log.Printf("Failed to write to a file. Error : %v", writeErr)
-				}
-			} else {
-				log.Printf("Failed to create file handle. Error : %v", err)
+		session, err := mgo.Dial(utils.GetEnvironmentVariable("MONGODB", "localhost"))
+		if err != nil {
+			panic(err)
+		}
+		defer session.Close()
+		collection := session.DB("ONSWebsite").C("master")
+		// Try to update the existing document. The Mongo driver sets keys to be
+		// all lower case.
+		query := bson.M{"filelocation": dataSet.FileLocation}
+		change := bson.M{ "$set": bson.M{"filecontent": dataSet.FileContent}}
+		updateErr := collection.Update(query, change)
+		if updateErr != nil {
+			// No document existed so this must be a new page
+			insertError := collection.Insert(dataSet)
+			if insertError != nil {
+				panic(insertError)
 			}
+			log.Printf("Inserted page at %s", dataSet.FileLocation)
 		} else {
-			log.Printf("Failed to create directory. Error : %v", dirErr)
+			log.Printf("Updated page at %s", dataSet.FileLocation)
 		}
 	}
 }
