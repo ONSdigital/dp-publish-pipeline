@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 type CollectionMessage struct {
 	CollectionId  string
 	EncryptionKey string
+	FileLocation  string
 }
 
 type DataSet struct {
@@ -29,36 +29,18 @@ func sendData(jsonMessage []byte, producer sarama.AsyncProducer, topic string) {
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
 		log.Printf("Failed to parse json message")
-	} else {
-		log.Printf("Uploading collectionId : %s", message.CollectionId)
-		files := findDatailes(message.CollectionId)
-		for i := 0; i < len(files); i++ {
-			file := files[i]
-			content, _ := decrypt.DecryptFile(file, message.EncryptionKey)
-			// Split the string just after the <collectionId>/complete, this creates the
-			// url needed within the secound element of the array.
-			url := strings.Split(file, message.CollectionId+"/complete")[1]
-
-			data, _ := json.Marshal(DataSet{url, string(content), message.CollectionId})
-			message := &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(data)}
-			producer.Input() <- message
-			log.Printf("Sent %s", url)
+	} else if strings.Contains(message.FileLocation, "data.json") {
+		zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
+		file := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
+		content, decryptErr := decrypt.DecryptFile(file, message.EncryptionKey)
+		if decryptErr != nil {
+			log.Printf("Failed to decrypt the following file : %s", file)
+		} else {
+			data, _ := json.Marshal(DataSet{message.FileLocation, string(content), message.CollectionId})
+			producer.Input() <- &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(data)}
+			log.Printf("Sent %s", message.FileLocation)
 		}
 	}
-}
-
-func findDatailes(collectionId string) []string {
-	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
-	searchPath := filepath.Join(zebedeeRoot, "collections", collectionId, "complete")
-	var files []string
-	filepath.Walk(searchPath, func(path string, info os.FileInfo, _ error) error {
-		base := filepath.Base(path)
-		if strings.Contains(base, "data.json") && !info.IsDir() {
-			files = append(files, path)
-		}
-		return nil
-	})
-	return files
 }
 
 func main() {

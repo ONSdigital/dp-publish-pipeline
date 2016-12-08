@@ -1,6 +1,6 @@
 ### Publish sender
 
-Decrypts collections and pushs the data off to a publish receiver
+Decrypts metadata and pushes the data off to a publish receiver
 
 #### Environment variables
 * CONSUME_TOPIC defaults to "test"

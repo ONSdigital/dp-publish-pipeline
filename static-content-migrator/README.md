@@ -4,8 +4,8 @@ A service which uploads static content from a Zebedee collection.
 
 Messages are sent via a kafka topic. Example of messages:
 ```
-{"collectionId":"test-0001","encryptionKey":"2iyOwMI3YF+fF+SDqMlD8Q=="}
-{"collectionId":"test0002","encryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow=="}
+{"collectionId":"test-0001","encryptionKey":"2iyOwMI3YF+fF+SDqMlD8Q==", "fileLocation":"/about/data.json"}
+{"collectionId":"test0002","encryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "fileLocation":"/peoplepopulationandcommunity/elections/electoralregistration/bulletins/electoralstatisticsforenglandwalesandnorthernireland/2015-02-26/1c560659.png"}
 ```
 
 ### Getting started

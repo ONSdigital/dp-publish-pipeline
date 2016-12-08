@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +15,7 @@ import (
 type CollectionMessage struct {
 	CollectionId  string
 	EncryptionKey string
+	FileLocation  string
 }
 
 func uploadCollection(jsonMessage []byte) {
@@ -23,40 +23,23 @@ func uploadCollection(jsonMessage []byte) {
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
 		log.Printf("Invalid json message received")
-	} else {
+	} else if !strings.Contains(message.FileLocation, "data.json") {
 		log.Printf("Uploading collectionId : %s", message.CollectionId)
-		files := findStaticFiles(message.CollectionId)
 		s3Client := s3.CreateS3Client()
-		bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "StaticContent")
-		for i := 0; i < len(files); i++ {
-			file := files[i]
-			content, decryptErr := decrypt.DecryptFile(file, message.EncryptionKey)
-			if decryptErr == nil {
-				// Split the string just after the <collectionId>/complete, this creates the
-				// url needed within the secound element of the array.
-				url := strings.Split(file, message.CollectionId+"/complete")[1]
-				s3.AddFileToS3(s3Client, bucketName, string(content), url)
-			}
+		bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
+		zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
+		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
+		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
+		if decryptErr == nil {
+			s3.AddFileToS3(s3Client, bucketName, string(content), message.FileLocation)
+		} else {
+			log.Printf("Failed to decrypt the following file : %s", path)
 		}
 	}
 }
 
-func findStaticFiles(collectionId string) []string {
-	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
-	searchPath := filepath.Join(zebedeeRoot, "collections", collectionId, "complete")
-	var files []string
-	filepath.Walk(searchPath, func(path string, info os.FileInfo, _ error) error {
-		base := filepath.Base(path)
-		if !strings.Contains(base, "data.json") && !info.IsDir() {
-			files = append(files, path)
-		}
-		return nil
-	})
-	return files
-}
-
 func main() {
-	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "StaticContent")
+	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
 	log.Printf("Starting Static Content Migrator")
 	s3.SetupBucket(s3.CreateS3Client(), bucketName, "eu-west-1")
 	master := kafka.CreateConsumer()
