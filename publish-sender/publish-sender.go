@@ -2,14 +2,15 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/ONSdigital/dp-publish-pipeline/decrypt"
-	"github.com/ONSdigital/dp-publish-pipeline/kafka"
-	"github.com/ONSdigital/dp-publish-pipeline/utils"
-	"github.com/Shopify/sarama"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ONSdigital/dp-publish-pipeline/decrypt"
+	"github.com/ONSdigital/dp-publish-pipeline/kafka"
+	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/Shopify/sarama"
 )
 
 type CollectionMessage struct {
@@ -41,7 +42,7 @@ func sendData(jsonMessage []byte, producer sarama.AsyncProducer, topic string) {
 			data, _ := json.Marshal(DataSet{url, string(content), message.CollectionId})
 			message := &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(data)}
 			producer.Input() <- message
-				log.Printf("Sent %s", url)
+			log.Printf("Sent %s", url)
 		}
 	}
 }
@@ -52,7 +53,7 @@ func findDatailes(collectionId string) []string {
 	var files []string
 	filepath.Walk(searchPath, func(path string, info os.FileInfo, _ error) error {
 		base := filepath.Base(path)
-		if strings.Contains(base, ".json") && !info.IsDir() {
+		if strings.Contains(base, "data.json") && !info.IsDir() {
 			files = append(files, path)
 		}
 		return nil

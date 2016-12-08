@@ -27,14 +27,16 @@ func uploadCollection(jsonMessage []byte) {
 		log.Printf("Uploading collectionId : %s", message.CollectionId)
 		files := findStaticFiles(message.CollectionId)
 		s3Client := s3.CreateS3Client()
-		bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "static-content")
+		bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "StaticContent")
 		for i := 0; i < len(files); i++ {
 			file := files[i]
-			content := decrypt.DecryptFile(file, message.EncryptionKey)
-			// Split the string just after the <collectionId>/complete, this creates the
-			// url needed within the secound element of the array.
-			url := strings.Split(file, message.CollectionId+"/complete")[1]
-			s3.AddFileToS3(s3Client, bucketName, string(content), url)
+			content, decryptErr := decrypt.DecryptFile(file, message.EncryptionKey)
+			if decryptErr == nil {
+				// Split the string just after the <collectionId>/complete, this creates the
+				// url needed within the secound element of the array.
+				url := strings.Split(file, message.CollectionId+"/complete")[1]
+				s3.AddFileToS3(s3Client, bucketName, string(content), url)
+			}
 		}
 	}
 }
@@ -45,7 +47,7 @@ func findStaticFiles(collectionId string) []string {
 	var files []string
 	filepath.Walk(searchPath, func(path string, info os.FileInfo, _ error) error {
 		base := filepath.Base(path)
-		if strings.Contains(base, ".png") && !info.IsDir() {
+		if !strings.Contains(base, "data.json") && !info.IsDir() {
 			files = append(files, path)
 		}
 		return nil
@@ -54,7 +56,7 @@ func findStaticFiles(collectionId string) []string {
 }
 
 func main() {
-	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "static-content")
+	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "StaticContent")
 	log.Printf("Starting Static Content Migrator")
 	s3.SetupBucket(s3.CreateS3Client(), bucketName, "eu-west-1")
 	master := kafka.CreateConsumer()

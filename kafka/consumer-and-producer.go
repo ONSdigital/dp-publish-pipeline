@@ -18,16 +18,16 @@ func ConsumeAndProduceMessages(master sarama.Consumer, consumeTopic string, prod
 	}
 
 	consumer, err := master.ConsumePartition(consumeTopic, 0, sarama.OffsetNewest)
-	defer func() {
-		if err := consumer.Close(); err != nil {
-			panic(err)
-		}
-	}()
-
 	if err != nil {
 		log.Printf("consumer")
 		panic(err)
 	}
+	defer func() {
+		if consumerErr := consumer.Close(); err != nil {
+			panic(consumerErr)
+		}
+	}()
+
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 	messageChannel := make(chan struct{})
