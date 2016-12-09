@@ -33,7 +33,7 @@ func ProcessMessages(master sarama.Consumer, topic string, callback ConsumerCall
 	signal.Notify(signals, os.Interrupt)
 	messageChannel := make(chan struct{})
 	go func() {
-		log.Printf("Starting kafka consumer")
+		log.Printf("Started kafka consumer of topic '%s'", topic)
 		for {
 			select {
 			case err := <-consumer.Errors():

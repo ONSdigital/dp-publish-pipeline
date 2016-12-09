@@ -47,15 +47,15 @@ func storeData(jsonMessage []byte) {
 }
 
 func main() {
-	log.Printf("Starting publish receiver")
+	topic := utils.GetEnvironmentVariable("TOPIC", "test")
 	master := kafka.CreateConsumer()
+	log.Printf("Started publish receiver on topic '%s'", topic)
 	defer func() {
 		err := master.Close()
 		if err != nil {
 			panic(err)
 		}
 	}()
-	topic := utils.GetEnvironmentVariable("TOPIC", "test")
 	kafka.ProcessMessages(master, topic, storeData)
 	log.Printf("Service stopped")
 }
