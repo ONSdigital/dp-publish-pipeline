@@ -10,16 +10,23 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/s3"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/Shopify/sarama"
 )
 
-type CollectionMessage struct {
-	CollectionId  string
-	EncryptionKey string
-	FileLocation  string
+type PublishFile struct {
+	CollectionId  string `json:"collectionId"`
+	EncryptionKey string `json:"encryptionKey"`
+	FileLocation  string `json:"fileLocation"`
 }
 
-func uploadCollection(jsonMessage []byte) {
-	var message CollectionMessage
+type FileComplete struct {
+	CollectionId string `json:"collectionId"`
+	FileLocation string `json:"fileLocation"`
+	S3Location   string `json:"s3Location"`
+}
+
+func uploadFile(jsonMessage []byte, producer sarama.AsyncProducer, topic string) {
+	var message PublishFile
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
 		log.Printf("Invalid json message received")
@@ -32,6 +39,9 @@ func uploadCollection(jsonMessage []byte) {
 		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
 		if decryptErr == nil {
 			s3.AddFileToS3(s3Client, bucketName, string(content), message.FileLocation)
+			s3Location := "s3://" + bucketName + message.FileLocation
+			fileComplete, _ := json.Marshal(FileComplete{message.CollectionId, message.FileLocation, s3Location})
+			producer.Input() <- &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(fileComplete)}
 		} else {
 			log.Printf("Failed to decrypt the following file : %s", path)
 		}
@@ -49,7 +59,8 @@ func main() {
 			panic(err)
 		}
 	}()
-	topic := utils.GetEnvironmentVariable("TOPIC", "test")
-	kafka.ProcessMessages(master, topic, uploadCollection)
+	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.publish-file")
+	produceTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
+	kafka.ConsumeAndProduceMessages(master, consumeTopic, produceTopic, uploadFile)
 	log.Printf("Service stopped")
 }

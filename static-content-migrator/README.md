@@ -8,6 +8,10 @@ Messages are sent via a kafka topic. Example of messages:
 {"collectionId":"test0002","encryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "fileLocation":"/peoplepopulationandcommunity/elections/electoralregistration/bulletins/electoralstatisticsforenglandwalesandnorthernireland/2015-02-26/1c560659.png"}
 ```
 
+Example of a output message:
+```
+{"collectionId":"test0002","fileLocation":"/peoplepopulationandcommunity/elections/electoralregistration/bulletins/electoralstatisticsforenglandwalesandnorthernireland/2015-02-26/1c560659.png","s3Location":"s3://content/peoplepopulationandcommunity/elections/electoralregistration/bulletins/electoralstatisticsforenglandwalesandnorthernireland/2015-02-26/1c560659.png"}
+```
 ### Getting started
 
 #### Environment variables
@@ -17,6 +21,8 @@ Messages are sent via a kafka topic. Example of messages:
 * KAFKA_ADDR defaults to localhost:9092
 * S3_BUCKET defaults to static_content
 * ZEBEDEE_ROOT defaults to ../test-data/
+* CONSUME_TOPIC defaults to uk.gov.ons.dp.web.publish-file
+* PRODUCE_TOPIC defaults to uk.gov.ons.dp.web.complete-file
 
 #### Running a test environment
 * Install ruby using ```brew install ruby```
