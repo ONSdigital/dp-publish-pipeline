@@ -1,21 +1,22 @@
 ### Publish receiver
 
-A service which receivers json messages containing new published pages for  
-the ONS website. Each page is stored in a mongodb collection
+This service receives JSON messages containing new published pages for
+the ONS website (either metadata or s3Locations).
 
 Test data examples
 ```
-{ "collectionId":"test-0001", "fileLocation": "/about/data.json", "FileContent":"1234353453"}
-{ "collectionId":"test-0002", "fileLocation": "/releases/newpage/data.json", "FileContent":"1234353453"}
+{ "collectionId":"test-0001", "fileLocation": "/about/data.json", "fileContent":"1234353453"}
+{ "collectionId":"test-0002", "fileLocation": "/releases/newpage/data.json", "fileContent":"1234353453"}
+{ "collectionId":"test-0002", "fileLocation": "/releases/newpage/stats.xls", "s3Location":"s3/path/stats.xls"}
 ```
+
 #### Environment variables
-* MONGODB defaults to localhost
-* TOPIC defaults to "test"
-* KAFKA_ADDR defaults to "localhost:9092"
+* `zebedee_root` defaults to "."
+* `TOPIC` defaults to "test"
+* `KAFKA_ADDR` defaults to "localhost:9092"
 
 #### Running a test environment
+
+Need to run these, only once:
 * Install kafka server ```brew install kafka```
 * Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```
-* Install docker
-* Run ```docker run --name website-mongo -p 27017:27017 mongo --storageEngine wiredTiger```
-* To inspect mongo use ```docker run -it --link website-mongo:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/ONSWebsite"'```
