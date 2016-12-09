@@ -30,21 +30,25 @@ func uploadFile(jsonMessage []byte, producer sarama.AsyncProducer, topic string)
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
 		log.Printf("Invalid json message received")
-	} else if !strings.Contains(message.FileLocation, "data.json") {
-		log.Printf("Uploading collectionId : %s", message.CollectionId)
-		s3Client := s3.CreateS3Client()
-		bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
-		zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
-		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
-		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
-		if decryptErr == nil {
-			s3.AddFileToS3(s3Client, bucketName, string(content), message.FileLocation)
-			s3Location := "s3://" + bucketName + message.FileLocation
-			fileComplete, _ := json.Marshal(FileComplete{message.CollectionId, message.FileLocation, s3Location})
-			producer.Input() <- &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(fileComplete)}
-		} else {
-			log.Printf("Failed to decrypt the following file : %s", path)
+	} else if message.CollectionId != "" && message.EncryptionKey != "" && message.FileLocation != "" {
+		if !strings.Contains(message.FileLocation, "data.json") {
+			log.Printf("Uploading collectionId : %s", message.CollectionId)
+			s3Client := s3.CreateS3Client()
+			bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
+			zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
+			path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
+			content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
+			if decryptErr == nil {
+				s3.AddFileToS3(s3Client, bucketName, string(content), message.FileLocation)
+				s3Location := "s3://" + bucketName + message.FileLocation
+				fileComplete, _ := json.Marshal(FileComplete{message.CollectionId, message.FileLocation, s3Location})
+				producer.Input() <- &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(fileComplete)}
+			} else {
+				log.Printf("Failed to decrypt the following file : %s", path)
+			}
 		}
+	} else {
+		log.Printf("Json message missing fields : %s", string(jsonMessage))
 	}
 }
 

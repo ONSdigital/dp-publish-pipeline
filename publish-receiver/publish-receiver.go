@@ -21,7 +21,7 @@ func storeData(jsonMessage []byte) {
 	err := json.Unmarshal(jsonMessage, &dataSet)
 	if err != nil {
 		log.Printf("Failed to parse json message")
-	} else {
+	} else if dataSet.CollectionId != "" && dataSet.FileContent != "" && dataSet.FileLocation != "" {
 		session, err := mgo.Dial(utils.GetEnvironmentVariable("MONGODB", "localhost"))
 		if err != nil {
 			panic(err)
@@ -43,6 +43,8 @@ func storeData(jsonMessage []byte) {
 		} else {
 			log.Printf("Updated page at %s", dataSet.FileLocation)
 		}
+	} else {
+		log.Printf("Json message missing fields : %s", string(jsonMessage))
 	}
 }
 
