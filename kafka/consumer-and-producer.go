@@ -12,9 +12,21 @@ import (
 type ProducerCallback func([]byte, sarama.AsyncProducer, string)
 
 func ConsumeAndProduceMessages(master sarama.Consumer, consumeTopic string, produceTopic string, callback ProducerCallback) {
-	producer, err := sarama.NewAsyncProducer([]string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}, nil)
-	if err != nil {
-		panic(err)
+	ConsumeAndProduceMessagesMulti(master, consumeTopic, produceTopic, callback, nil)
+}
+
+func ConsumeAndProduceMessagesByChannel(master sarama.Consumer, consumeTopic string, ch chan []byte) {
+	ConsumeAndProduceMessagesMulti(master, consumeTopic, "", nil, ch)
+}
+
+func ConsumeAndProduceMessagesMulti(master sarama.Consumer, consumeTopic string, produceTopic string, callback ProducerCallback, ch chan []byte) {
+	var producer sarama.AsyncProducer
+	var err error
+	if callback != nil {
+		producer, err = sarama.NewAsyncProducer([]string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}, nil)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	consumer, err := master.ConsumePartition(consumeTopic, 0, sarama.OffsetNewest)
@@ -30,23 +42,31 @@ func ConsumeAndProduceMessages(master sarama.Consumer, consumeTopic string, prod
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
-	messageChannel := make(chan struct{})
+	messageChannel := make(chan bool)
 	go func() {
-		log.Printf("Starting kafka consumer")
+		log.Printf("Starting kafka consumer - topics '%s' to '%s'", consumeTopic, produceTopic)
 		for {
 			select {
 			case err := <-consumer.Errors():
 				log.Printf("Error : %s", err.Error())
 			case msg := <-consumer.Messages():
-				callback(msg.Value, producer, produceTopic)
+				if callback != nil {
+					callback(msg.Value, producer, produceTopic)
+				} else {
+					ch <- msg.Value
+				}
 			case <-signals:
 				// The consumer needs to close the producer as setting it up as a defer function
 				// triggers a race condition.
-				if err := producer.Close(); err != nil {
-					log.Fatalln(err)
+				if callback != nil {
+					if err := producer.Close(); err != nil {
+						log.Fatalln(err)
+					}
+				} else {
+					ch <- nil
 				}
 				log.Printf("Closing kafka consumer")
-				messageChannel <- struct{}{}
+				messageChannel <- true
 			}
 		}
 	}()
