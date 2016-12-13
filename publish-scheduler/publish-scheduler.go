@@ -48,9 +48,9 @@ func findCollectionFiles(collectionId string) ([]string, error) {
 		if err != nil {
 			log.Panicf("Walk failed: %s", err.Error())
 		}
-		// base := filepath.Base(path)
-		if !info.IsDir() {
-			files = append(files, path)
+		relPath, relErr := filepath.Rel(searchPath, path)
+		if !info.IsDir() && relErr == nil {
+			files = append(files, relPath)
 		}
 		return nil
 	})
