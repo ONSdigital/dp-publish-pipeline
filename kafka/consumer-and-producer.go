@@ -11,22 +11,23 @@ import (
 
 type ProducerCallback func([]byte, sarama.AsyncProducer, string)
 
-func ConsumeAndProduceMessages(master sarama.Consumer, consumeTopic string, produceTopic string, callback ProducerCallback) {
-	ConsumeAndProduceMessagesMulti(master, consumeTopic, produceTopic, callback, nil)
+type ConsumeMessage struct {
+	Payload  []byte
+	Producer sarama.AsyncProducer
 }
 
-func ConsumeAndProduceMessagesByChannel(master sarama.Consumer, consumeTopic string, ch chan []byte) {
-	ConsumeAndProduceMessagesMulti(master, consumeTopic, "", nil, ch)
+func ConsumeAndProduceMessages(master sarama.Consumer, consumeTopic, produceTopic string, callback ProducerCallback) {
+	ConsumeMessagesMulti(master, consumeTopic, produceTopic, callback, nil)
 }
 
-func ConsumeAndProduceMessagesMulti(master sarama.Consumer, consumeTopic string, produceTopic string, callback ProducerCallback, ch chan []byte) {
-	var producer sarama.AsyncProducer
-	var err error
-	if callback != nil {
-		producer, err = sarama.NewAsyncProducer([]string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}, nil)
-		if err != nil {
-			panic(err)
-		}
+func ConsumeAndChannelMessages(master sarama.Consumer, consumeTopic, produceTopic string, ch chan ConsumeMessage) {
+	ConsumeMessagesMulti(master, consumeTopic, produceTopic, nil, ch)
+}
+
+func ConsumeMessagesMulti(master sarama.Consumer, consumeTopic, produceTopic string, callback ProducerCallback, ch chan ConsumeMessage) {
+	producer, err := sarama.NewAsyncProducer([]string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}, nil)
+	if err != nil {
+		panic(err)
 	}
 
 	consumer, err := master.ConsumePartition(consumeTopic, 0, sarama.OffsetNewest)
@@ -53,7 +54,7 @@ func ConsumeAndProduceMessagesMulti(master sarama.Consumer, consumeTopic string,
 				if callback != nil {
 					callback(msg.Value, producer, produceTopic)
 				} else {
-					ch <- msg.Value
+					ch <- ConsumeMessage{Payload: msg.Value, Producer: producer}
 				}
 			case <-signals:
 				// The consumer needs to close the producer as setting it up as a defer function
@@ -63,7 +64,7 @@ func ConsumeAndProduceMessagesMulti(master sarama.Consumer, consumeTopic string,
 						log.Fatalln(err)
 					}
 				} else {
-					ch <- nil
+					ch <- ConsumeMessage{Payload: nil, Producer: nil}
 				}
 				log.Printf("Closing kafka consumer")
 				messageChannel <- true
