@@ -17,6 +17,10 @@ type DataSet struct {
 	S3Location   string `json:"s3Location"`
 }
 
+type ReleaseCollection struct {
+	CollectionId string `json:"collectionId"`
+}
+
 type S3Set struct {
 	CollectionId string `bson:"collectionId"`
 	FileLocation string `bson:"fileLocation"`
@@ -32,9 +36,12 @@ type MetaSet struct {
 const DATA_BASE = "onswebsite"
 const MASTER_COLLECTION = "master"
 const S3_COLLECTION = "s3"
+const S3_PREFIX = ".s3"
+const META_PREFIX = ".meta"
 
 const MONGODB_ENV = "MONGODB"
-const CONSUMER_TOPIC_ENV = "CONSUME_TOPIC"
+const FILECOMPETE_TOPIC_ENV = "FILE_COMPETE_TOPIC"
+const COMPETE_TOPIC_ENV = "COMPETE_TOPIC"
 
 func storeData(jsonMessage []byte) {
 	var dataSet DataSet
@@ -48,62 +55,112 @@ func storeData(jsonMessage []byte) {
 		}
 		defer session.Close()
 		db := session.DB(DATA_BASE)
-		if dataSet.FileContent != "" {
-			collection := db.C(MASTER_COLLECTION)
-			metaContent(*collection, dataSet)
-		} else if dataSet.S3Location != "" {
-			collection := db.C(S3_COLLECTION)
-			s3Content(*collection, dataSet)
+		if dataSet.S3Location != "" {
+			collection := db.C(dataSet.CollectionId + S3_PREFIX)
+			s3Set := S3Set{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
+			addS3Document(*collection, s3Set)
+		} else if dataSet.FileContent != "" {
+			collection := db.C(dataSet.CollectionId + META_PREFIX)
+			metaSet := MetaSet{dataSet.CollectionId, dataSet.FileLocation, dataSet.FileContent}
+			addMetaDocument(*collection, metaSet)
 		} else {
 			log.Printf("Unknown data from %v", dataSet)
 		}
 	}
 }
 
-func s3Content(collection mgo.Collection, dataSet DataSet) {
-	query := bson.M{"fileLocation": dataSet.FileLocation}
-	change := bson.M{"$set": bson.M{"s3Location": dataSet.S3Location, "collecionId": dataSet.CollectionId}}
-	updateErr := collection.Update(query, change)
-	if updateErr != nil {
-		// No document existed so this must be a new resource
-		s3Set := S3Set{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
-		insertError := collection.Insert(s3Set)
-		if insertError != nil {
-			panic(insertError)
+func complete(jsonMessage []byte) {
+	var release ReleaseCollection
+	err := json.Unmarshal(jsonMessage, &release)
+	if err != nil {
+		log.Printf("Failed to parse json message")
+	} else if release.CollectionId != "" {
+		session, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
+		if err != nil {
+			panic(err)
 		}
-		log.Printf("Inserted resource at %s", dataSet.FileLocation)
+		defer session.Close()
+		db := session.DB(DATA_BASE)
+		// Copy S3 content to the public collection
+		src := db.C(release.CollectionId + S3_PREFIX)
+		copyS3Collection(*src, *db.C(S3_COLLECTION))
+		src.DropCollection()
+
+		//Copy meta content to the public collection
+		src = db.C(release.CollectionId + META_PREFIX)
+		copyMetaCollection(*src, *db.C(MASTER_COLLECTION))
+		src.DropCollection()
+		log.Printf("Release collectionId : %s", release.CollectionId)
 	} else {
-		log.Printf("Updated resource at %s", dataSet.FileLocation)
+		log.Printf("Json mesage missing field %s", string(jsonMessage))
 	}
 }
 
-func metaContent(collection mgo.Collection, dataSet DataSet) {
-	query := bson.M{"fileLocation": dataSet.FileLocation}
-	change := bson.M{"$set": bson.M{"fileContent": dataSet.FileContent, "collecionId": dataSet.CollectionId}}
+func addS3Document(collection mgo.Collection, doc S3Set) {
+	query := bson.M{"fileLocation": doc.FileLocation}
+	change := bson.M{"$set": bson.M{"s3Location": doc.S3Location, "collecionId": doc.CollectionId}}
 	updateErr := collection.Update(query, change)
 	if updateErr != nil {
-		// No document existed so this must be a new page
-		metaSet := MetaSet{dataSet.CollectionId, dataSet.FileLocation, dataSet.FileContent}
-		insertError := collection.Insert(metaSet)
+		// No document existed so this must be a new resource
+		insertError := collection.Insert(doc)
 		if insertError != nil {
 			panic(insertError)
 		}
-		log.Printf("Inserted page at %s", dataSet.FileLocation)
+		log.Printf("Inserted resource within collection %s at %s", collection.Name, doc.FileLocation)
 	} else {
-		log.Printf("Updated page at %s", dataSet.FileLocation)
+		log.Printf("Updated resource within collection %s at %s", collection.Name, doc.FileLocation)
+	}
+}
+
+func addMetaDocument(collection mgo.Collection, doc MetaSet) {
+	query := bson.M{"fileLocation": doc.FileLocation}
+	change := bson.M{"$set": bson.M{"fileContent": doc.FileContent, "collecionId": doc.CollectionId}}
+	updateErr := collection.Update(query, change)
+	if updateErr != nil {
+		// No document existed so this must be a new page
+		insertError := collection.Insert(doc)
+		if insertError != nil {
+			panic(insertError)
+		}
+		log.Printf("Inserted page within collection %s at %s", collection.Name, doc.FileLocation)
+	} else {
+		log.Printf("Updated page within collection %s at %s", collection.Name, doc.FileLocation)
+	}
+}
+
+func copyS3Collection(src mgo.Collection, dst mgo.Collection) {
+	result := make([]S3Set, 0)
+	iter := src.Find(nil).Iter()
+	iter.All(&result)
+	iter.Close()
+	for i := 0; i < len(result); i++ {
+		addS3Document(dst, result[i])
+	}
+}
+
+func copyMetaCollection(src mgo.Collection, dst mgo.Collection) {
+	result := make([]MetaSet, 0)
+	iter := src.Find(nil).Iter()
+	iter.All(&result)
+	iter.Close()
+	for i := 0; i < len(result); i++ {
+		addMetaDocument(dst, result[i])
 	}
 }
 
 func main() {
-	topic := utils.GetEnvironmentVariable(CONSUMER_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
+	fileCompeteTopic := utils.GetEnvironmentVariable(FILECOMPETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
+	competeTopic := utils.GetEnvironmentVariable(COMPETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete")
 	master := kafka.CreateConsumer()
-	log.Printf("Started publish receiver on topic '%s'", topic)
+	log.Printf("Started publish receiver on topic '%s'", fileCompeteTopic)
 	defer func() {
 		err := master.Close()
 		if err != nil {
 			panic(err)
 		}
 	}()
-	kafka.ProcessMessages(master, topic, storeData)
+
+	go kafka.ProcessMessages(master, fileCompeteTopic, storeData)
+	kafka.ProcessMessages(master, competeTopic, complete)
 	log.Printf("Service stopped")
 }
