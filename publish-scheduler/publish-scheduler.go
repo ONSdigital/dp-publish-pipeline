@@ -114,19 +114,19 @@ func scheduleCollection(jsonMessage []byte, producer sarama.AsyncProducer, sched
 }
 
 func checkSchedule(schedule *[]ScheduleMessage, producer sarama.AsyncProducer) {
-	epochTime := time.Now()
+	epochTime := time.Now().Unix()
 	sched.Lock()
 	defer sched.Unlock()
-	log.Printf("search len:%d %v", len(*schedule), schedule)
+	log.Printf("%d check len:%d %v", epochTime, len(*schedule), schedule)
 	for i := 0; i < len(*schedule); i++ {
-		if (*schedule)[i].CollectionId != "" {
+		if (*schedule)[i].CollectionId == "" {
 			continue
 		}
 		scheduleTime, err := strconv.ParseInt((*schedule)[i].ScheduleTime, 10, 64)
 		if err != nil {
 			log.Panicf("Cannot numeric convert: '%s'", (*schedule)[i].ScheduleTime)
 		}
-		if scheduleTime <= epochTime.Unix() {
+		if scheduleTime <= epochTime {
 			log.Printf("found %d id: %s", i, (*schedule)[i].CollectionId)
 			message := ScheduleMessage{CollectionId: (*schedule)[i].CollectionId, EncryptionKey: (*schedule)[i].EncryptionKey}
 			(*schedule)[i] = ScheduleMessage{CollectionId: ""}
@@ -135,6 +135,8 @@ func checkSchedule(schedule *[]ScheduleMessage, producer sarama.AsyncProducer) {
 				log.Panicf("Marshal failed: %s", err)
 			}
 			publishChannel <- kafka.ConsumeMessage{Payload: jsonMessage, Producer: producer}
+		} else {
+			log.Printf("Not time for %d - %d > %d", i, epochTime, scheduleTime)
 		}
 	}
 }
