@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -113,29 +114,28 @@ func scheduleCollection(jsonMessage []byte, producer sarama.AsyncProducer, sched
 }
 
 func checkSchedule(schedule *[]ScheduleMessage, producer sarama.AsyncProducer) {
-	doSchedule := -1
+	epochTime := time.Now()
 	sched.Lock()
+	defer sched.Unlock()
 	log.Printf("search len:%d %v", len(*schedule), schedule)
 	for i := 0; i < len(*schedule); i++ {
 		if (*schedule)[i].CollectionId != "" {
-			log.Printf("found %d id: %s", i, (*schedule)[i].CollectionId)
-			doSchedule = i
-			break
+			continue
 		}
-	}
-	var message ScheduleMessage
-	if doSchedule != -1 {
-		message = ScheduleMessage{CollectionId: (*schedule)[doSchedule].CollectionId, EncryptionKey: (*schedule)[doSchedule].EncryptionKey}
-		(*schedule)[doSchedule] = ScheduleMessage{CollectionId: ""}
-	}
-	sched.Unlock()
-
-	if doSchedule != -1 {
-		jsonMessage, err := json.Marshal(message)
+		scheduleTime, err := strconv.ParseInt((*schedule)[i].ScheduleTime, 10, 64)
 		if err != nil {
-			log.Panicf("Marshal failed: %s", err)
+			log.Panicf("Cannot numeric convert: '%s'", (*schedule)[i].ScheduleTime)
 		}
-		publishChannel <- kafka.ConsumeMessage{Payload: jsonMessage, Producer: producer}
+		if scheduleTime <= epochTime.Unix() {
+			log.Printf("found %d id: %s", i, (*schedule)[i].CollectionId)
+			message := ScheduleMessage{CollectionId: (*schedule)[i].CollectionId, EncryptionKey: (*schedule)[i].EncryptionKey}
+			(*schedule)[i] = ScheduleMessage{CollectionId: ""}
+			jsonMessage, err := json.Marshal(message)
+			if err != nil {
+				log.Panicf("Marshal failed: %s", err)
+			}
+			publishChannel <- kafka.ConsumeMessage{Payload: jsonMessage, Producer: producer}
+		}
 	}
 }
 
