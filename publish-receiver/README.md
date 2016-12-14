@@ -23,8 +23,8 @@ Test data examples for 'uk.gov.ons.dp.web.complete' topic
 
 #### Environment variables
 * `zebedee_root` defaults to "."
-* `FILE_COMPETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file"
-* `COMPETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete"
+* `FILE_COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file"
+* `COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete"
 * `KAFKA_ADDR` defaults to "localhost:9092"
 
 #### Running a test environment

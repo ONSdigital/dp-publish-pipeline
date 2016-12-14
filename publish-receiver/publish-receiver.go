@@ -42,8 +42,8 @@ const S3_PREFIX = ".s3"
 const META_PREFIX = ".meta"
 
 const MONGODB_ENV = "MONGODB"
-const FILECOMPETE_TOPIC_ENV = "FILE_COMPETE_TOPIC"
-const COMPETE_TOPIC_ENV = "COMPETE_TOPIC"
+const FILECOMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
+const COMPLETE_TOPIC_ENV = "COMPLETE_TOPIC"
 
 func storeData(jsonMessage []byte) {
 	var dataSet DataSet
@@ -151,8 +151,8 @@ func copyMetaCollection(src mgo.Collection, dst mgo.Collection) {
 }
 
 func main() {
-	fileCompeteTopic := utils.GetEnvironmentVariable(FILECOMPETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
-	competeTopic := utils.GetEnvironmentVariable(COMPETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete")
+	fileCompleteTopic := utils.GetEnvironmentVariable(FILECOMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
+	completeTopic := utils.GetEnvironmentVariable(COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete")
 	master := kafka.CreateConsumer()
 	log.Printf("Started publish receiver")
 	defer func() {
@@ -165,8 +165,8 @@ func main() {
 	signal.Notify(signals, os.Interrupt)
 	fileCompleteChannel := make(chan []byte, 10)
 	completeChannel := make(chan []byte, 10)
-	kafka.ProcessMessages(master, fileCompeteTopic, fileCompleteChannel)
-	kafka.ProcessMessages(master, competeTopic, completeChannel)
+	kafka.ProcessMessages(master, fileCompleteTopic, fileCompleteChannel)
+	kafka.ProcessMessages(master, completeTopic, completeChannel)
 
 	for {
 		select {
