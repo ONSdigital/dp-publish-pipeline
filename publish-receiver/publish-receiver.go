@@ -42,7 +42,7 @@ const S3_PREFIX = ".s3"
 const META_PREFIX = ".meta"
 
 const MONGODB_ENV = "MONGODB"
-const FILECOMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
+const FILE_COMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
 const COMPLETE_TOPIC_ENV = "COMPLETE_TOPIC"
 
 func storeData(jsonMessage []byte) {
@@ -151,7 +151,7 @@ func copyMetaCollection(src mgo.Collection, dst mgo.Collection) {
 }
 
 func main() {
-	fileCompleteTopic := utils.GetEnvironmentVariable(FILECOMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
+	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
 	completeTopic := utils.GetEnvironmentVariable(COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete")
 	master := kafka.CreateConsumer()
 	log.Printf("Started publish receiver")
