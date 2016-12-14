@@ -144,9 +144,9 @@ func main() {
 	if fileinfo, err := os.Stat(zebedeeRoot); err != nil || fileinfo.IsDir() == false {
 		log.Panicf("Cannot see directory '%s'", zebedeeRoot)
 	}
-	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "test")
-	produceFileTopic = utils.GetEnvironmentVariable("PRODUCE_TOPIC", "test")
-	produceTotalTopic = utils.GetEnvironmentVariable("TOTAL_TOPIC", "test")
+	consumeTopic := utils.GetEnvironmentVariable("SCHEDULE_TOPIC", "uk.gov.ons.dp.web.schedule")
+	produceFileTopic = utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
+	produceTotalTopic = utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
 	schedule := make([]ScheduleMessage, 0, 10)
 
 	log.Printf("Starting publish scheduler from '%s' topics: '%s' -> '%s'/'%s'", zebedeeRoot, consumeTopic, produceFileTopic, produceTotalTopic)
