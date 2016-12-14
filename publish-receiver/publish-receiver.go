@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"os"
+	"os/signal"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -98,7 +100,7 @@ func complete(jsonMessage []byte) {
 
 func addS3Document(collection mgo.Collection, doc S3Set) {
 	query := bson.M{"fileLocation": doc.FileLocation}
-	change := bson.M{"$set": bson.M{"s3Location": doc.S3Location, "collecionId": doc.CollectionId}}
+	change := bson.M{"$set": bson.M{"s3Location": doc.S3Location, "collectionId": doc.CollectionId}}
 	updateErr := collection.Update(query, change)
 	if updateErr != nil {
 		// No document existed so this must be a new resource
@@ -152,15 +154,29 @@ func main() {
 	fileCompeteTopic := utils.GetEnvironmentVariable(FILECOMPETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
 	competeTopic := utils.GetEnvironmentVariable(COMPETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete")
 	master := kafka.CreateConsumer()
-	log.Printf("Started publish receiver on topic '%s'", fileCompeteTopic)
+	log.Printf("Started publish receiver")
 	defer func() {
 		err := master.Close()
 		if err != nil {
 			panic(err)
 		}
 	}()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt)
+	fileCompleteChannel := make(chan []byte, 10)
+	completeChannel := make(chan []byte, 10)
+	kafka.ProcessMessages(master, fileCompeteTopic, fileCompleteChannel)
+	kafka.ProcessMessages(master, competeTopic, completeChannel)
 
-	go kafka.ProcessMessages(master, fileCompeteTopic, storeData)
-	kafka.ProcessMessages(master, competeTopic, complete)
-	log.Printf("Service stopped")
+	for {
+		select {
+		case msg := <-fileCompleteChannel:
+			storeData(msg)
+		case msg := <-completeChannel:
+			complete(msg)
+		case <-signals:
+			log.Printf("Service stopped")
+			return
+		}
+	}
 }
