@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"os/signal"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -45,44 +44,35 @@ const MONGODB_ENV = "MONGODB"
 const FILE_COMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
 const COMPLETE_TOPIC_ENV = "COMPLETE_TOPIC"
 
-func storeData(jsonMessage []byte) {
+func storeData(jsonMessage []byte, db *mgo.Database) {
 	var dataSet DataSet
 	err := json.Unmarshal(jsonMessage, &dataSet)
 	if err != nil {
 		log.Printf("Failed to parse json message")
-	} else if dataSet.CollectionId != "" && dataSet.FileLocation != "" {
-		session, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
-		if err != nil {
-			panic(err)
-		}
-		defer session.Close()
-		db := session.DB(DATA_BASE)
-		if dataSet.S3Location != "" {
-			collection := db.C(dataSet.CollectionId + S3_PREFIX)
-			s3Set := S3Set{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
-			addS3Document(*collection, s3Set)
-		} else if dataSet.FileContent != "" {
-			collection := db.C(dataSet.CollectionId + META_PREFIX)
-			metaSet := MetaSet{dataSet.CollectionId, dataSet.FileLocation, dataSet.FileContent}
-			addMetaDocument(*collection, metaSet)
-		} else {
-			log.Printf("Unknown data from %v", dataSet)
-		}
+		return
+	}
+	if dataSet.CollectionId == "" || dataSet.FileLocation == "" {
+		log.Printf("Unknown data from %v", dataSet)
+		return
+	}
+	if dataSet.S3Location != "" {
+		collection := db.C(dataSet.CollectionId + S3_PREFIX)
+		s3Set := S3Set{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
+		addS3Document(*collection, s3Set)
+	} else if dataSet.FileContent != "" {
+		collection := db.C(dataSet.CollectionId + META_PREFIX)
+		metaSet := MetaSet{dataSet.CollectionId, dataSet.FileLocation, dataSet.FileContent}
+		addMetaDocument(*collection, metaSet)
+
 	}
 }
 
-func complete(jsonMessage []byte) {
+func completeCollection(jsonMessage []byte, db *mgo.Database) {
 	var release ReleaseCollection
 	err := json.Unmarshal(jsonMessage, &release)
 	if err != nil {
 		log.Printf("Failed to parse json message")
 	} else if release.CollectionId != "" {
-		session, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
-		if err != nil {
-			panic(err)
-		}
-		defer session.Close()
-		db := session.DB(DATA_BASE)
 		// Copy S3 content to the public collection
 		src := db.C(release.CollectionId + S3_PREFIX)
 		copyS3Collection(*src, *db.C(S3_COLLECTION))
@@ -152,28 +142,26 @@ func copyMetaCollection(src mgo.Collection, dst mgo.Collection) {
 
 func main() {
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
-	completeTopic := utils.GetEnvironmentVariable(COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete")
-	master := kafka.CreateConsumer()
-	log.Printf("Started publish receiver")
-	defer func() {
-		err := master.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
-	fileCompleteChannel := make(chan []byte, 10)
-	completeChannel := make(chan []byte, 10)
-	kafka.ProcessMessages(master, fileCompleteTopic, fileCompleteChannel)
-	kafka.ProcessMessages(master, completeTopic, completeChannel)
+	collectionCompleteTopic := utils.GetEnvironmentVariable(COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete")
+	fileCompleteConsumer := kafka.NewConsumer(fileCompleteTopic)
+	collectionCompleteConsumer := kafka.NewConsumer(collectionCompleteTopic)
+	log.Printf("Started publish receiver on %q and %q", fileCompleteTopic, collectionCompleteTopic)
 
+	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
+	if err != nil {
+		panic(err)
+	}
+	defer dbSession.Close()
+	db := dbSession.DB(DATA_BASE)
+
+	signals := make(chan os.Signal, 1)
+	//signal.Notify(signals, os.Interrupt)
 	for {
 		select {
-		case msg := <-fileCompleteChannel:
-			storeData(msg)
-		case msg := <-completeChannel:
-			complete(msg)
+		case msg := <-fileCompleteConsumer.Incoming:
+			storeData(msg, db)
+		case msg := <-collectionCompleteConsumer.Incoming:
+			completeCollection(msg, db)
 		case <-signals:
 			log.Printf("Service stopped")
 			return

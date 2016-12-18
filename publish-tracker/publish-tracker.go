@@ -3,8 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"os"
-	"os/signal"
+	"sync"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -47,91 +46,92 @@ func (t *Tracker) IsFinished() bool {
 
 // This should be locked with a mutex as mutliple go routines access the map
 var releases map[string]Tracker = make(map[string]Tracker)
+var mutex sync.Mutex
 
-func trackNewRelease(jsonMessage []byte, producer kafka.ProducerInterface) {
+func trackNewRelease(jsonMessage []byte, producer kafka.Producer) {
 	var newCollection NewCollectionRelease
 	err := json.Unmarshal(jsonMessage, &newCollection)
 	if err != nil {
 		log.Printf("Failed to parse json message")
-	} else if newCollection.CollectionId != "" && newCollection.FileCount != 0 {
-		tracker, exists := releases[newCollection.CollectionId]
-
-		// There a change the messages between the two consumers can be out of sync
-		// so we need to check if it exists first.
-		if !exists {
-			tracker = Tracker{newCollection.CollectionId, newCollection.FileCount, make([]string, 0)}
-		} else {
-			// Else update the current tracker with the total count and key
-			tracker.Total = newCollection.FileCount
-		}
-
-		if tracker.IsFinished() == true {
-			data, _ := json.Marshal(CollectionComplete{tracker.CollectionId})
-			producer.SendMessage(data)
-			delete(releases, newCollection.CollectionId)
-		} else {
-			releases[newCollection.CollectionId] = tracker
-		}
-	} else {
-		log.Printf("Json message is mising fields : %s", string(jsonMessage))
+		return
 	}
+	if newCollection.CollectionId == "" || newCollection.FileCount == 0 {
+		log.Printf("Json message is mising fields : %s", string(jsonMessage))
+		return
+	}
+
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	tracker, exists := releases[newCollection.CollectionId]
+
+	// There a change the messages between the two consumers can be out of sync
+	// so we need to check if it exists first.
+	if !exists {
+		tracker = Tracker{newCollection.CollectionId, newCollection.FileCount, make([]string, 0)}
+	} else {
+		// Else update the current tracker with the total count and key
+		tracker.Total = newCollection.FileCount
+	}
+
+	if tracker.IsFinished() == true {
+		data, _ := json.Marshal(CollectionComplete{tracker.CollectionId})
+		producer.Output <- data
+		delete(releases, newCollection.CollectionId)
+	} else {
+		releases[newCollection.CollectionId] = tracker
+	}
+
 }
 
-func trackInprogressRelease(jsonMessage []byte, producer kafka.ProducerInterface) {
+func trackInprogressRelease(jsonMessage []byte, producer kafka.Producer) {
 	var file FileComplete
-	err := json.Unmarshal(jsonMessage, &file)
-	if err != nil {
+	if err := json.Unmarshal(jsonMessage, &file); err != nil {
 		log.Printf("Failed to parse json message")
-	} else if file.CollectionId != "" && file.FileLocation != "" {
-		tracker, exists := releases[file.CollectionId]
-		if !exists {
-			// Recieved an event for collection that not had it tracker started,
-			// so create it as we can start storing the files published.
-			tracker = Tracker{file.CollectionId, 0, make([]string, 0)}
-		}
-		completed := tracker.Update(file)
-		if completed {
-			data, _ := json.Marshal(CollectionComplete{tracker.CollectionId})
-			producer.SendMessage(data)
-			delete(releases, file.CollectionId)
-		} else {
-			releases[file.CollectionId] = tracker
-		}
-	} else {
+		return
+	}
+	if file.CollectionId == "" || file.FileLocation == "" {
 		log.Printf("Json message is mising fields : %s", string(jsonMessage))
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	tracker, exists := releases[file.CollectionId]
+	if !exists {
+		// Recieved an event for collection that not had it tracker started,
+		// so create it as we can start storing the files published.
+		tracker = Tracker{file.CollectionId, 0, make([]string, 0)}
+	}
+	completed := tracker.Update(file)
+	if completed {
+		data, _ := json.Marshal(CollectionComplete{tracker.CollectionId})
+		producer.Output <- data
+		delete(releases, file.CollectionId)
+	} else {
+		releases[file.CollectionId] = tracker
 	}
 }
 
 func main() {
-	log.Printf("Starting publish tracker")
 	publishCountTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
-	competeFileTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_TOPIC", "uk.gov.ons.dp.web.complete-file")
-	competeTopic := utils.GetEnvironmentVariable("COMPLETE_TOPIC", "uk.gov.ons.dp.web.complete")
-	master := kafka.CreateConsumer()
-	defer func() {
-		err := master.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
-	publishCountChannel := make(chan []byte, 10)
-	competeFileChannel := make(chan []byte, 10)
-	kafka.ProcessMessages(master, publishCountTopic, publishCountChannel)
-	kafka.ProcessMessages(master, competeFileTopic, competeFileChannel)
-	producer := kafka.CreateProducer(competeTopic)
-	defer producer.Close()
+	completeFileTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_TOPIC", "uk.gov.ons.dp.web.complete-file")
+	completeCollectionTopic := utils.GetEnvironmentVariable("COMPLETE_TOPIC", "uk.gov.ons.dp.web.complete")
+	log.Printf("Starting publish tracker of %q and %q to %q", completeFileTopic, publishCountTopic, completeCollectionTopic)
+
+	fileConsumer := kafka.NewConsumer(completeFileTopic)
+	collectionConsumer := kafka.NewConsumer(publishCountTopic)
+	//signals := make(chan os.Signal, 1)
+	//signal.Notify(signals, os.Interrupt)
+	producer := kafka.NewProducer(completeCollectionTopic)
 
 	for {
 		select {
-		case msg := <-publishCountChannel:
+		case msg := <-collectionConsumer.Incoming:
 			trackNewRelease(msg, producer)
-		case msg := <-competeFileChannel:
+		case msg := <-fileConsumer.Incoming:
 			trackInprogressRelease(msg, producer)
-		case <-signals:
-			log.Printf("Stopped publish tracker")
-			return
+			//case <-signals:
+			//log.Printf("Stopped publish tracker")
+			//return
 		}
 	}
 }

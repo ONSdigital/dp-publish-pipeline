@@ -37,12 +37,10 @@ type PublishTotalMessage struct {
 	FileCount    int
 }
 
-var zebedeeRoot, produceFileTopic, produceTotalTopic string
-var totalProducer sarama.AsyncProducer
-var publishChannel chan kafka.ConsumeMessage
+var TICK = time.Millisecond * 200
 var sched sync.Mutex
 
-func findCollectionFiles(collectionId string) ([]string, error) {
+func findCollectionFiles(zebedeeRoot, collectionId string) ([]string, error) {
 	var files []string
 	searchPath := filepath.Join(zebedeeRoot, "collections", collectionId, "complete")
 	filepath.Walk(searchPath, func(path string, info os.FileInfo, err error) error {
@@ -58,7 +56,7 @@ func findCollectionFiles(collectionId string) ([]string, error) {
 	return files, nil
 }
 
-func publishCollection(jsonMessage []byte, producer sarama.AsyncProducer) {
+func publishCollection(zebedeeRoot string, jsonMessage []byte, fileProducerChannel, totalProducerChannel chan []byte) {
 	var message PublishMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
@@ -70,25 +68,25 @@ func publishCollection(jsonMessage []byte, producer sarama.AsyncProducer) {
 		var files []string
 		var data []byte
 
-		if files, err = findCollectionFiles(message.CollectionId); err != nil {
+		if files, err = findCollectionFiles(zebedeeRoot, message.CollectionId); err != nil {
 			log.Panic(err)
 		}
 		for i := 0; i < len(files); i++ {
 			if data, err = json.Marshal(PublishFileMessage{message.CollectionId, message.EncryptionKey, files[i]}); err != nil {
 				log.Panic(err)
 			}
-			producer.Input() <- &sarama.ProducerMessage{Topic: produceFileTopic, Value: sarama.StringEncoder(data)}
+			fileProducerChannel <- data
 		}
 		if data, err = json.Marshal(PublishTotalMessage{message.CollectionId, len(files)}); err != nil {
 			log.Panic(err)
 		}
-		totalProducer.Input() <- &sarama.ProducerMessage{Topic: produceTotalTopic, Value: sarama.StringEncoder(data)}
+		totalProducerChannel <- data
 		log.Printf("Sent collection '%s' - %d files", message.CollectionId, len(files))
 
 	}
 }
 
-func scheduleCollection(jsonMessage []byte, producer sarama.AsyncProducer, schedule *[]ScheduleMessage) {
+func scheduleCollection(jsonMessage []byte, schedule *[]ScheduleMessage) {
 	var message ScheduleMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
@@ -113,11 +111,11 @@ func scheduleCollection(jsonMessage []byte, producer sarama.AsyncProducer, sched
 	}
 }
 
-func checkSchedule(schedule *[]ScheduleMessage, producer sarama.AsyncProducer) {
+func checkSchedule(schedule *[]ScheduleMessage, producer chan []byte, publishChannel chan []byte) {
 	epochTime := time.Now().Unix()
 	sched.Lock()
 	defer sched.Unlock()
-	log.Printf("%d check len:%d %v", epochTime, len(*schedule), schedule)
+	//log.Printf("%d check len:%d %v", epochTime, len(*schedule), schedule)
 	for i := 0; i < len(*schedule); i++ {
 		if (*schedule)[i].CollectionId == "" {
 			continue
@@ -134,7 +132,7 @@ func checkSchedule(schedule *[]ScheduleMessage, producer sarama.AsyncProducer) {
 			if err != nil {
 				log.Panicf("Marshal failed: %s", err)
 			}
-			publishChannel <- kafka.ConsumeMessage{Payload: jsonMessage, Producer: producer}
+			publishChannel <- jsonMessage
 		} else {
 			log.Printf("Not time for %d - %d > %d", i, epochTime, scheduleTime)
 		}
@@ -142,72 +140,49 @@ func checkSchedule(schedule *[]ScheduleMessage, producer sarama.AsyncProducer) {
 }
 
 func main() {
-	zebedeeRoot = utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
+	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
 	if fileinfo, err := os.Stat(zebedeeRoot); err != nil || fileinfo.IsDir() == false {
-		log.Panicf("Cannot see directory '%s'", zebedeeRoot)
+		log.Panicf("Cannot see directory %q", zebedeeRoot)
 	}
+
 	consumeTopic := utils.GetEnvironmentVariable("SCHEDULE_TOPIC", "uk.gov.ons.dp.web.schedule")
-	produceFileTopic = utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
-	produceTotalTopic = utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
+	produceFileTopic := utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
+	produceTotalTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
+
 	schedule := make([]ScheduleMessage, 0, 10)
 
-	log.Printf("Starting publish scheduler from '%s' topics: '%s' -> '%s'/'%s'", zebedeeRoot, consumeTopic, produceFileTopic, produceTotalTopic)
+	log.Printf("Starting publish scheduler from %q topics: %q -> %q/%q", zebedeeRoot, consumeTopic, produceFileTopic, produceTotalTopic)
 
-	var err error
-	totalProducer, err = sarama.NewAsyncProducer([]string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}, nil)
-	if err != nil {
-		log.Panic(err)
-	}
+	totalProducer := kafka.NewProducer(produceTotalTopic)
+	consumer := kafka.NewConsumer(consumeTopic)
+	fileProducer := kafka.NewProducer(produceFileTopic)
 
-	consumer := kafka.CreateConsumer()
-	if consumer == nil {
-		log.Panicf("Cannot create consumer for '%s'", consumeTopic)
-	}
-	defer func() {
-		if err := consumer.Close(); err != nil {
-			log.Panic(err)
-		}
-	}()
-
-	scheduleChannel := make(chan kafka.ConsumeMessage, 10)
-	publishChannel = make(chan kafka.ConsumeMessage, 10)
+	publishChannel := make(chan []byte, 10)
 	exitChannel := make(chan bool)
-	go kafka.ConsumeAndChannelMessages(consumer, consumeTopic, produceFileTopic, scheduleChannel)
+
+	signals := make(chan os.Signal, 1)
+	//signal.Notify(signals, os.Interrupt)
 
 	go func() {
-	MainLoop:
 		for {
 			select {
-			case scheduleMessage := <-scheduleChannel:
-				if scheduleMessage.Payload == nil {
-					break MainLoop
-				}
-				if scheduleMessage.Producer == nil {
-					exitChannel <- false
-					panic("Schedule Producer is nil")
-				}
-				scheduleCollection(scheduleMessage.Payload, scheduleMessage.Producer, &schedule)
-
+			case scheduleMessage := <-consumer.Incoming:
+				scheduleCollection(scheduleMessage, &schedule)
 			case publishMessage := <-publishChannel:
-				if publishMessage.Payload == nil {
-					break MainLoop
-				}
-				if publishMessage.Producer == nil {
-					exitChannel <- false
-					panic("Publish Producer is nil")
-				}
-				publishCollection(publishMessage.Payload, publishMessage.Producer)
-
-			case <-time.After(time.Millisecond * 1200):
-				checkSchedule(&schedule, totalProducer)
+				publishCollection(zebedeeRoot, publishMessage, fileProducer.Output, totalProducer.Output)
+			case <-time.After(TICK):
+				checkSchedule(&schedule, totalProducer.Output, publishChannel)
+			case <-signals:
+				// log.Printf("Quitting publisher-scheduler of topic %q", consumeTopic)
+				fileProducer.Closer <- true
+				consumer.Closer <- true
+				totalProducer.Closer <- true
+				exitChannel <- true
+				return
 			}
 		}
-		exitChannel <- false
 	}()
 	<-exitChannel
 
-	if err := totalProducer.Close(); err != nil {
-		log.Fatalln(err)
-	}
 	log.Printf("Service publish scheduler stopped")
 }
