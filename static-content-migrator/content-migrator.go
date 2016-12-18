@@ -55,7 +55,7 @@ func main() {
 	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	produceTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
-	regionName := utils.GetEnvironmentVariable("S3_REGION", "us-east-1")
+	regionName := utils.GetEnvironmentVariable("S3_REGION", "eu-west-1")
 	log.Printf("Starting Static Content Migrator from %q from %q to %q", zebedeeRoot, consumeTopic, produceTopic)
 	s3.SetupBucket(s3.CreateS3Client(), bucketName, regionName)
 	consumer := kafka.NewConsumer(consumeTopic)
