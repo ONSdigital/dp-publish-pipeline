@@ -114,7 +114,8 @@ func main() {
 	for {
 		select {
 		case msg := <-fileCompleteConsumer.Incoming:
-			storeData(msg, db)
+			// The db session is concurrency-safe (See https://godoc.org/gopkg.in/mgo.v2#Session)
+			go storeData(msg, db)
 		case <-signals:
 			log.Printf("Service stopped")
 			return
