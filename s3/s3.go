@@ -22,11 +22,12 @@ func CreateS3Client() *minio.Client {
 }
 
 func SetupBucket(client *minio.Client, bucketName string, location string) {
-	err := client.MakeBucket(bucketName, location)
-	if err != nil {
+	if err := client.MakeBucket(bucketName, location); err != nil {
+		if exists, err_exists := client.BucketExists(bucketName); err_exists == nil && exists {
+			log.Printf("We already own %s\n", bucketName)
+			return
+		}
 		log.Fatalln(err)
-	} else {
-		log.Printf("%s bucket aleady exits\n", bucketName)
 	}
 }
 
