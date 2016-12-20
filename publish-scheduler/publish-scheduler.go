@@ -158,7 +158,7 @@ func main() {
 	consumer := kafka.NewConsumer(consumeTopic)
 	fileProducer := kafka.NewProducer(produceFileTopic)
 
-	publishChannel := make(chan []byte, 10)
+	publishChannel := make(chan []byte)
 	exitChannel := make(chan bool)
 
 	signals := make(chan os.Signal, 1)
@@ -168,11 +168,11 @@ func main() {
 		for {
 			select {
 			case scheduleMessage := <-consumer.Incoming:
-				scheduleCollection(scheduleMessage, &schedule)
+				go scheduleCollection(scheduleMessage, &schedule)
 			case publishMessage := <-publishChannel:
-				publishCollection(zebedeeRoot, publishMessage, fileProducer.Output, totalProducer.Output)
+				go publishCollection(zebedeeRoot, publishMessage, fileProducer.Output, totalProducer.Output)
 			case <-time.After(TICK):
-				checkSchedule(&schedule, totalProducer.Output, publishChannel)
+				go checkSchedule(&schedule, totalProducer.Output, publishChannel)
 			case <-signals:
 				// log.Printf("Quitting publisher-scheduler of topic %q", consumeTopic)
 				fileProducer.Closer <- true
