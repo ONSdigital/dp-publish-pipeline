@@ -12,20 +12,8 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 )
 
-type PublishFile struct {
-	CollectionId  string `json:"collectionId"`
-	EncryptionKey string `json:"encryptionKey"`
-	FileLocation  string `json:"fileLocation"`
-}
-
-type FileComplete struct {
-	CollectionId string `json:"collectionId"`
-	FileLocation string `json:"fileLocation"`
-	S3Location   string `json:"s3Location"`
-}
-
 func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, producer kafka.Producer) {
-	var message PublishFile
+	var message kafka.PublishFileMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Printf("Invalid json message received")
 		return
@@ -42,7 +30,7 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, produ
 		if decryptErr == nil {
 			s3.AddFileToS3(s3Client, bucketName, string(content), message.FileLocation)
 			s3Location := "s3://" + bucketName + message.FileLocation
-			fileComplete, _ := json.Marshal(FileComplete{message.CollectionId, message.FileLocation, s3Location})
+			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: s3Location})
 			producer.Output <- fileComplete
 		} else {
 			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, path)

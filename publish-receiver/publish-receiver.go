@@ -12,17 +12,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-type DataSet struct {
-	CollectionId string `json:"collectionId"`
-	FileLocation string `json:"fileLocation"`
-	FileContent  string `json:"fileContent"`
-	S3Location   string `json:"s3Location"`
-}
-
-type ReleaseCollection struct {
-	CollectionId string `json:"collectionId"`
-}
-
 type S3Set struct {
 	CollectionId string `bson:"collectionId"`
 	FileLocation string `bson:"fileLocation"`
@@ -43,7 +32,7 @@ const MONGODB_ENV = "MONGODB"
 const FILE_COMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
 
 func storeData(jsonMessage []byte, db *mgo.Database) {
-	var dataSet DataSet
+	var dataSet kafka.FileCompleteMessage
 	err := json.Unmarshal(jsonMessage, &dataSet)
 	if err != nil {
 		log.Printf("Failed to parse json message")

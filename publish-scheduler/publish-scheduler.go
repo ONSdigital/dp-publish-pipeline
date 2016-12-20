@@ -11,33 +11,9 @@ import (
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
-	"github.com/Shopify/sarama"
 )
 
-type ScheduleMessage struct {
-	CollectionId  string
-	EncryptionKey string
-	ScheduleTime  string
-	Producer      sarama.AsyncProducer `json:"-"`
-}
-
-type PublishMessage struct {
-	CollectionId  string
-	EncryptionKey string
-}
-
-type PublishFileMessage struct {
-	CollectionId  string
-	EncryptionKey string
-	FileLocation  string
-}
-
-type PublishTotalMessage struct {
-	CollectionId string
-	FileCount    int
-}
-
-var TICK = time.Millisecond * 200
+var tick = time.Millisecond * 200
 var sched sync.Mutex
 
 func findCollectionFiles(zebedeeRoot, collectionId string) ([]string, error) {
@@ -57,7 +33,7 @@ func findCollectionFiles(zebedeeRoot, collectionId string) ([]string, error) {
 }
 
 func publishCollection(zebedeeRoot string, jsonMessage []byte, fileProducerChannel, totalProducerChannel chan []byte) {
-	var message PublishMessage
+	var message kafka.PublishMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
 
@@ -72,12 +48,12 @@ func publishCollection(zebedeeRoot string, jsonMessage []byte, fileProducerChann
 			log.Panic(err)
 		}
 		for i := 0; i < len(files); i++ {
-			if data, err = json.Marshal(PublishFileMessage{message.CollectionId, message.EncryptionKey, files[i]}); err != nil {
+			if data, err = json.Marshal(kafka.PublishFileMessage{message.CollectionId, message.EncryptionKey, files[i]}); err != nil {
 				log.Panic(err)
 			}
 			fileProducerChannel <- data
 		}
-		if data, err = json.Marshal(PublishTotalMessage{message.CollectionId, len(files)}); err != nil {
+		if data, err = json.Marshal(kafka.PublishTotalMessage{message.CollectionId, len(files)}); err != nil {
 			log.Panic(err)
 		}
 		totalProducerChannel <- data
@@ -86,8 +62,8 @@ func publishCollection(zebedeeRoot string, jsonMessage []byte, fileProducerChann
 	}
 }
 
-func scheduleCollection(jsonMessage []byte, schedule *[]ScheduleMessage) {
-	var message ScheduleMessage
+func scheduleCollection(jsonMessage []byte, schedule *[]kafka.ScheduleMessage) {
+	var message kafka.ScheduleMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
 	} else if len(message.CollectionId) == 0 {
@@ -111,7 +87,7 @@ func scheduleCollection(jsonMessage []byte, schedule *[]ScheduleMessage) {
 	}
 }
 
-func checkSchedule(schedule *[]ScheduleMessage, producer chan []byte, publishChannel chan []byte) {
+func checkSchedule(schedule *[]kafka.ScheduleMessage, producer chan []byte, publishChannel chan []byte) {
 	epochTime := time.Now().Unix()
 	sched.Lock()
 	defer sched.Unlock()
@@ -127,8 +103,8 @@ func checkSchedule(schedule *[]ScheduleMessage, producer chan []byte, publishCha
 		}
 		if scheduleTime <= epochTime {
 			log.Printf("Collection %q found %d", collectionId, i)
-			message := ScheduleMessage{CollectionId: collectionId, EncryptionKey: (*schedule)[i].EncryptionKey}
-			(*schedule)[i] = ScheduleMessage{CollectionId: ""}
+			message := kafka.ScheduleMessage{CollectionId: collectionId, EncryptionKey: (*schedule)[i].EncryptionKey}
+			(*schedule)[i] = kafka.ScheduleMessage{CollectionId: ""}
 			jsonMessage, err := json.Marshal(message)
 			if err != nil {
 				log.Panicf("Marshal failed: %s", err)
@@ -150,7 +126,7 @@ func main() {
 	produceFileTopic := utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	produceTotalTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
 
-	schedule := make([]ScheduleMessage, 0, 10)
+	schedule := make([]kafka.ScheduleMessage, 0, 10)
 
 	log.Printf("Starting publish scheduler from %q topics: %q -> %q/%q", zebedeeRoot, consumeTopic, produceFileTopic, produceTotalTopic)
 
@@ -171,7 +147,7 @@ func main() {
 				go scheduleCollection(scheduleMessage, &schedule)
 			case publishMessage := <-publishChannel:
 				go publishCollection(zebedeeRoot, publishMessage, fileProducer.Output, totalProducer.Output)
-			case <-time.After(TICK):
+			case <-time.After(tick):
 				go checkSchedule(&schedule, totalProducer.Output, publishChannel)
 			case <-signals:
 				// log.Printf("Quitting publisher-scheduler of topic %q", consumeTopic)

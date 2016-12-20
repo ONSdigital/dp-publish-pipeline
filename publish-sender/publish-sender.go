@@ -11,20 +11,8 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 )
 
-type CollectionMessage struct {
-	CollectionId  string
-	EncryptionKey string
-	FileLocation  string
-}
-
-type DataSet struct {
-	FileLocation string
-	FileContent  string
-	CollectionId string
-}
-
 func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
-	var message CollectionMessage
+	var message kafka.PublishFileMessage
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
 		log.Printf("Failed to parse json message")
@@ -41,7 +29,7 @@ func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
 			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, file)
 			return
 		}
-		data, _ := json.Marshal(DataSet{message.FileLocation, string(content), message.CollectionId})
+		data, _ := json.Marshal(kafka.FileCompleteMessage{FileLocation: message.FileLocation, FileContent: string(content), CollectionId: message.CollectionId})
 		producer.Output <- data
 		log.Printf("Collection %q - Sent %s", message.CollectionId, message.FileLocation)
 	}

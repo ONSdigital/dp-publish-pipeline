@@ -9,27 +9,13 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 )
 
-type NewCollectionRelease struct {
-	CollectionId string
-	FileCount    int
-}
-
-type FileComplete struct {
-	CollectionId string
-	FileLocation string
-}
-
-type CollectionComplete struct {
-	CollectionId string
-}
-
 type Tracker struct {
 	CollectionId string
 	Total        int
 	Files        []string
 }
 
-func (t *Tracker) Update(file FileComplete) bool {
+func (t *Tracker) Update(file kafka.FileCompleteMessage) bool {
 	t.Files = append(t.Files, file.FileLocation)
 	log.Printf("Collection %q - Progress %d/%d", t.CollectionId, len(t.Files), t.Total)
 	return t.IsFinished()
@@ -49,7 +35,7 @@ var releases map[string]Tracker = make(map[string]Tracker)
 var mutex sync.Mutex
 
 func trackNewRelease(jsonMessage []byte, producer kafka.Producer) {
-	var newCollection NewCollectionRelease
+	var newCollection kafka.PublishTotalMessage
 	err := json.Unmarshal(jsonMessage, &newCollection)
 	if err != nil {
 		log.Printf("Failed to parse json message")
@@ -75,7 +61,7 @@ func trackNewRelease(jsonMessage []byte, producer kafka.Producer) {
 	}
 
 	if tracker.IsFinished() == true {
-		data, _ := json.Marshal(CollectionComplete{tracker.CollectionId})
+		data, _ := json.Marshal(kafka.CollectionCompleteMessage{tracker.CollectionId})
 		producer.Output <- data
 		delete(releases, newCollection.CollectionId)
 	} else {
@@ -85,7 +71,7 @@ func trackNewRelease(jsonMessage []byte, producer kafka.Producer) {
 }
 
 func trackInprogressRelease(jsonMessage []byte, producer kafka.Producer) {
-	var file FileComplete
+	var file kafka.FileCompleteMessage
 	if err := json.Unmarshal(jsonMessage, &file); err != nil {
 		log.Printf("Failed to parse json message")
 		return
@@ -103,7 +89,7 @@ func trackInprogressRelease(jsonMessage []byte, producer kafka.Producer) {
 	}
 	completed := tracker.Update(file)
 	if completed {
-		data, _ := json.Marshal(CollectionComplete{tracker.CollectionId})
+		data, _ := json.Marshal(kafka.CollectionCompleteMessage{tracker.CollectionId})
 		producer.Output <- data
 		delete(releases, file.CollectionId)
 	} else {
