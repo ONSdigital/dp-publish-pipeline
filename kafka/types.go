@@ -1,7 +1,5 @@
 package kafka
 
-import "github.com/Shopify/sarama"
-
 type PublishMessage struct {
 	CollectionId  string
 	EncryptionKey string
@@ -11,7 +9,6 @@ type ScheduleMessage struct {
 	CollectionId  string
 	EncryptionKey string
 	ScheduleTime  string
-	Producer      sarama.AsyncProducer `json:"-"`
 }
 
 type PublishFileMessage struct {
