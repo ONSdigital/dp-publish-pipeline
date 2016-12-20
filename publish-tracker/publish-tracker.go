@@ -31,13 +31,13 @@ type Tracker struct {
 
 func (t *Tracker) Update(file FileComplete) bool {
 	t.Files = append(t.Files, file.FileLocation)
-	log.Printf("CollectionId : %s - Progress %d/%d", t.CollectionId, len(t.Files), t.Total)
+	log.Printf("Collection %q - Progress %d/%d", t.CollectionId, len(t.Files), t.Total)
 	return t.IsFinished()
 }
 
 func (t *Tracker) IsFinished() bool {
 	if len(t.Files) == t.Total {
-		log.Printf("CollectionId : %s - Completed %d/%d", t.CollectionId, len(t.Files), t.Total)
+		log.Printf("Collection %q - Completed %d/%d", t.CollectionId, len(t.Files), t.Total)
 		return true
 	} else {
 		return false

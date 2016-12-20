@@ -38,12 +38,12 @@ func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
 		file := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(file, message.EncryptionKey)
 		if decryptErr != nil {
-			log.Printf("Failed to decrypt the following file : %s", file)
+			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, file)
 			return
 		}
 		data, _ := json.Marshal(DataSet{message.FileLocation, string(content), message.CollectionId})
 		producer.Output <- data
-		log.Printf("Sent %s", message.FileLocation)
+		log.Printf("Collection %q - Sent %s", message.CollectionId, message.FileLocation)
 	}
 }
 

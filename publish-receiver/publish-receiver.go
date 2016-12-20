@@ -75,9 +75,9 @@ func addS3Document(collection mgo.Collection, doc S3Set) {
 		if insertError != nil {
 			panic(insertError)
 		}
-		log.Printf("Inserted resource within collection %s at %s", collection.Name, doc.FileLocation)
+		log.Printf("Collection %q Inserted into %q resource %s", doc.CollectionId, collection.Name, doc.FileLocation)
 	} else {
-		log.Printf("Updated resource within collection %s at %s", collection.Name, doc.FileLocation)
+		log.Printf("Collection %q Updated %q with %s", doc.CollectionId, collection.Name, doc.FileLocation)
 	}
 }
 
@@ -91,9 +91,9 @@ func addMetaDocument(collection mgo.Collection, doc MetaSet) {
 		if insertError != nil {
 			panic(insertError)
 		}
-		log.Printf("Inserted page within collection %s at %s", collection.Name, doc.FileLocation)
+		log.Printf("Collection %q Inserted page into %s at %s", doc.CollectionId, collection.Name, doc.FileLocation)
 	} else {
-		log.Printf("Updated page within collection %s at %s", collection.Name, doc.FileLocation)
+		log.Printf("Collection %q Updated page in %s at %s", doc.CollectionId, collection.Name, doc.FileLocation)
 	}
 }
 

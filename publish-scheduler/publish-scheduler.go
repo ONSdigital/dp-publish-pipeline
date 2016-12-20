@@ -81,7 +81,7 @@ func publishCollection(zebedeeRoot string, jsonMessage []byte, fileProducerChann
 			log.Panic(err)
 		}
 		totalProducerChannel <- data
-		log.Printf("Sent collection '%s' - %d files", message.CollectionId, len(files))
+		log.Printf("Collection %q - sent %d files", message.CollectionId, len(files))
 
 	}
 }
@@ -106,7 +106,7 @@ func scheduleCollection(jsonMessage []byte, schedule *[]ScheduleMessage) {
 		} else {
 			(*schedule)[addIndex] = message
 		}
-		log.Printf("schedule now len:%d %v", len(*schedule), *schedule)
+		log.Printf("Collection %q schedule now len:%d %v", message.CollectionId, len(*schedule), *schedule)
 		sched.Unlock()
 	}
 }
@@ -117,16 +117,17 @@ func checkSchedule(schedule *[]ScheduleMessage, producer chan []byte, publishCha
 	defer sched.Unlock()
 	//log.Printf("%d check len:%d %v", epochTime, len(*schedule), schedule)
 	for i := 0; i < len(*schedule); i++ {
-		if (*schedule)[i].CollectionId == "" {
+		collectionId := (*schedule)[i].CollectionId
+		if collectionId == "" {
 			continue
 		}
 		scheduleTime, err := strconv.ParseInt((*schedule)[i].ScheduleTime, 10, 64)
 		if err != nil {
-			log.Panicf("Cannot numeric convert: '%s'", (*schedule)[i].ScheduleTime)
+			log.Panicf("Collection %q Cannot numeric convert: %q", collectionId, (*schedule)[i].ScheduleTime)
 		}
 		if scheduleTime <= epochTime {
-			log.Printf("found %d id: %s", i, (*schedule)[i].CollectionId)
-			message := ScheduleMessage{CollectionId: (*schedule)[i].CollectionId, EncryptionKey: (*schedule)[i].EncryptionKey}
+			log.Printf("Collection %q found %d", collectionId, i)
+			message := ScheduleMessage{CollectionId: collectionId, EncryptionKey: (*schedule)[i].EncryptionKey}
 			(*schedule)[i] = ScheduleMessage{CollectionId: ""}
 			jsonMessage, err := json.Marshal(message)
 			if err != nil {
@@ -134,7 +135,7 @@ func checkSchedule(schedule *[]ScheduleMessage, producer chan []byte, publishCha
 			}
 			publishChannel <- jsonMessage
 		} else {
-			log.Printf("Not time for %d - %d > %d", i, epochTime, scheduleTime)
+			log.Printf("Collection %q Not time for %d - %d > %d", collectionId, i, epochTime, scheduleTime)
 		}
 	}
 }

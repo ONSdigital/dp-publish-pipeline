@@ -35,7 +35,7 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, produ
 		return
 	}
 	if !strings.Contains(message.FileLocation, "data.json") {
-		log.Printf("Uploading collectionId : %s", message.CollectionId)
+		log.Printf("Collection %q - start", message.CollectionId)
 		s3Client := s3.CreateS3Client()
 		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
@@ -45,7 +45,7 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, produ
 			fileComplete, _ := json.Marshal(FileComplete{message.CollectionId, message.FileLocation, s3Location})
 			producer.Output <- fileComplete
 		} else {
-			log.Printf("Failed to decrypt the following file : %s", path)
+			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, path)
 		}
 	}
 }
