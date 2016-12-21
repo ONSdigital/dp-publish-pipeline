@@ -26,7 +26,9 @@ Example of an output message:
 
 * `make scheduler`
 * Feed the scheduler by running a kafka producer as follows:
+
   ```
   kafka-console-producer --broker-list $KAFKA_ADDR --topic $SCHEDULE_TOPIC
   ```
+
   and pasting in the inbound message shown above.
