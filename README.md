@@ -3,10 +3,10 @@ dp-publish-pipeline
 
 ### Getting started
 See the following pages per service
-* [Publish-scheduler](publish-scheduler]/README.md)   
-* [Publish-tracker](publish-tracker/README.md)     
-* [Publish-sender](publish-sender/README.md)   
-* [Static-content-migrator](static-content-migrator/README.md)  
+* [Publish-scheduler](publish-scheduler/README.md)
+* [Publish-tracker](publish-tracker/README.md)
+* [Publish-sender](publish-sender/README.md)
+* [Static-content-migrator](static-content-migrator/README.md)
 * [Publish-receiver](publish-receiver/README.md)
 
 ### Design
