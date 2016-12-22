@@ -5,3 +5,5 @@ publish-receiver/publish-receiver
 publish-sender/publish-sender
 *.tar.gz
 build
+.idea
+dp-publish-pipeline.iml
