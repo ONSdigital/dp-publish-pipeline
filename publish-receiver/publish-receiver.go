@@ -88,7 +88,7 @@ func addMetaDocument(collection mgo.Collection, doc MetaSet) {
 
 func main() {
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
-	fileCompleteConsumer := kafka.NewConsumer(fileCompleteTopic)
+	fileCompleteConsumer := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
 	log.Printf("Started publish receiver on %q", fileCompleteTopic)
 
 	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
@@ -102,9 +102,9 @@ func main() {
 	signal.Notify(signals, os.Interrupt)
 	for {
 		select {
-		case msg := <-fileCompleteConsumer.Incoming:
-			// The db session is concurrency-safe (See https://godoc.org/gopkg.in/mgo.v2#Session)
-			go storeData(msg, db)
+		case consumerMessage := <-fileCompleteConsumer.Incoming:
+			storeData(consumerMessage.GetData(), db)
+			consumerMessage.Commit()
 		case <-signals:
 			log.Printf("Service stopped")
 			return

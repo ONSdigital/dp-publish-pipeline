@@ -46,13 +46,13 @@ func main() {
 	regionName := utils.GetEnvironmentVariable("S3_REGION", "eu-west-1")
 	log.Printf("Starting Static Content Migrator from %q from %q to %q", zebedeeRoot, consumeTopic, produceTopic)
 	s3.SetupBucket(s3.CreateS3Client(), bucketName, regionName)
-	consumer := kafka.NewConsumer(consumeTopic)
+	consumer := kafka.NewConsumerGroup(consumeTopic, "content-migrator")
 	producer := kafka.NewProducer(produceTopic)
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
-			go uploadFile(zebedeeRoot, consumerMessage, bucketName, producer)
+			uploadFile(zebedeeRoot, consumerMessage.GetData(), bucketName, producer)
+			consumerMessage.Commit()
 		}
 	}
-	//log.Printf("Service stopped")
 }

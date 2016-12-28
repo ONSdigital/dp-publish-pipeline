@@ -140,7 +140,7 @@ func main() {
 	log.Printf("Starting publish scheduler from %q topics: %q -> %q/%q", zebedeeRoot, consumeTopic, produceFileTopic, produceTotalTopic)
 
 	totalProducer := kafka.NewProducer(produceTotalTopic)
-	consumer := kafka.NewConsumer(consumeTopic)
+	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-scheduler")
 	fileProducer := kafka.NewProducer(produceFileTopic)
 
 	publishChannel := make(chan scheduleJob)
@@ -150,7 +150,8 @@ func main() {
 		for {
 			select {
 			case scheduleMessage := <-consumer.Incoming:
-				go scheduleCollection(scheduleMessage, &schedule, zebedeeRoot)
+				scheduleCollection(scheduleMessage.GetData(), &schedule, zebedeeRoot)
+				scheduleMessage.Commit()
 			case publishMessage := <-publishChannel:
 				go publishCollection(publishMessage, fileProducer.Output, totalProducer.Output)
 			case <-time.After(tick):

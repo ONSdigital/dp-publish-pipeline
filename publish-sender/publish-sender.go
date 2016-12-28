@@ -40,12 +40,13 @@ func main() {
 	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	produceTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	log.Printf("Starting publish sender from %q to %q", consumeTopic, produceTopic)
-	consumer := kafka.NewConsumer(consumeTopic)
+	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-sender")
 	producer := kafka.NewProducer(produceTopic)
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
-			go sendData(zebedeeRoot, consumerMessage, producer)
+			sendData(zebedeeRoot, consumerMessage.GetData(), producer)
+			consumerMessage.Commit()
 		}
 	}
 	// log.Println("publish sender stopped")
