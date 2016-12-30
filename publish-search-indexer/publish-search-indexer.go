@@ -1,0 +1,1 @@
+package publish_search_indexer
