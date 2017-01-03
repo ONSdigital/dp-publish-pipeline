@@ -4,12 +4,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -55,21 +52,13 @@ type TimeSeries struct {
 	Description TimeSeriesDescription `json:"description"`
 }
 
-type DataFilter struct {
-	FromMonth   string
-	ToMonth     string
-	FromQuarter string
-	ToQuarter   string
-	FromYear    string
-	ToYear      string
-	Frequency   string
-}
-
 type Record struct {
 	FileLocation string `json:"fileLocation" bson:"fileLocation"`
 	FileContent  string `json:"fileContent" bson:"fileContent"`
 	CollectionId string `json:"collectionId" bson:"collectionId"`
 }
+
+type FileWriter func([]string) error
 
 const DATA_BASE = "onswebsite"
 const MASTER_COLLECTION = "meta"
@@ -81,15 +70,27 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 	filter := findFilterParams(r)
 	log.Printf("Got format : %s, uri: %s", format, uri)
 	timeSeries := loadTimeSeriesData(uri)
-	//w.Header().Set("Content-Disposition", "attachment; filename=data.csv")
-	//w.Header().Set("Content-Type", "text/csv")
-	timeSeriesToCSVFile(w, timeSeries, filter)
+
+	if format == "xls" {
+		w.Header().Set("Content-Disposition", "attachment; filename=data.xls")
+		w.Header().Set("Content-Type", "application/vnd.ms-excel")
+		xls := createXLSWorkbook("data")
+		defer xls.close()
+		timeSeriesToFile(xls.writeRow, timeSeries, filter)
+		xls.dumpToWriter(w)
+	} else {
+		w.Header().Set("Content-Disposition", "attachment; filename=data.csv")
+		w.Header().Set("Content-Type", "text/csv")
+		csv := csv.NewWriter(w)
+		timeSeriesToFile(csv.Write, timeSeries, filter)
+		csv.Flush()
+	}
 }
 
 func findParams(query *http.Request) (string, string, error) {
 	format := query.URL.Query().Get("format")
 	uri := query.URL.Query().Get("uri")
-	if format != "csv" {
+	if format != "csv" && format != "xls" {
 		return "", "", errors.New("Unsupported format : " + format)
 	}
 	if uri == "" {
@@ -128,141 +129,41 @@ func loadTimeSeriesData(uri string) TimeSeries {
 	return timeSeries
 }
 
-func timeSeriesToCSVFile(writer io.Writer, timeSeries TimeSeries, filter DataFilter) {
-	csv := csv.NewWriter(writer)
-	csv.Write([]string{"Title", timeSeries.Description.Title})
-	csv.Write([]string{"CDID", timeSeries.Description.Cdid})
-	csv.Write([]string{"PreUnit", timeSeries.Description.PreUnit})
-	csv.Write([]string{"Unit", timeSeries.Description.Unit})
-	csv.Write([]string{"Release date", timeSeries.Description.ReleaseDate})
-	csv.Write([]string{"Next release", timeSeries.Description.NextRelease})
-	csv.Write([]string{"Important Notes", ""})
+func timeSeriesToFile(writer FileWriter, timeSeries TimeSeries, filter DataFilter) {
+	writer([]string{"Title", timeSeries.Description.Title})
+	writer([]string{"CDID", timeSeries.Description.Cdid})
+	writer([]string{"PreUnit", timeSeries.Description.PreUnit})
+	writer([]string{"Unit", timeSeries.Description.Unit})
+	writer([]string{"Release date", timeSeries.Description.ReleaseDate})
+	writer([]string{"Next release", timeSeries.Description.NextRelease})
+	writer([]string{"Important Notes", ""})
 
 	switch filter.Frequency {
 	case "year":
 		if filter.FromYear != "" && filter.ToYear != "" {
-			filterOnYears(csv, timeSeries, filter)
+			filterOnYears(writer, timeSeries, filter)
 		} else {
 			for _, data := range timeSeries.Years {
-				csv.Write([]string{data.Year, data.Value})
+				writer([]string{data.Year, data.Value})
 			}
 		}
 	case "quarter":
 		if filter.FromQuarter != "" && filter.ToQuarter != "" {
-			filterOnQuarter(csv, timeSeries, filter)
+			filterOnQuarter(writer, timeSeries, filter)
 		} else {
 			for _, data := range timeSeries.Quarters {
-				csv.Write([]string{data.Year + " " + data.Quarter, data.Value})
+				writer([]string{data.Year + " " + data.Quarter, data.Value})
 			}
 		}
 	case "month":
 		if filter.FromMonth != "" && filter.ToMonth != "" {
-			filterOnMonth(csv, timeSeries, filter)
+			filterOnMonth(writer, timeSeries, filter)
 		} else {
 			for _, data := range timeSeries.Months {
-				csv.Write([]string{data.Date, data.Value})
+				writer([]string{data.Date, data.Value})
 			}
 		}
 	}
-
-	// Wrtie all the data to the writer
-	csv.Flush()
-}
-
-func filterOnYears(csv *csv.Writer, timeSeries TimeSeries, filter DataFilter) {
-	min, _ := strconv.Atoi(filter.FromYear)
-	max, _ := strconv.Atoi(filter.ToYear)
-	for _, data := range timeSeries.Years {
-		currentYear, _ := strconv.Atoi(data.Year)
-		if currentYear >= min && currentYear <= max {
-			csv.Write([]string{data.Year, data.Value})
-		}
-	}
-}
-
-func filterOnQuarter(csv *csv.Writer, timeSeries TimeSeries, filter DataFilter) {
-	min, _ := strconv.Atoi(filter.FromYear)
-	max, _ := strconv.Atoi(filter.ToYear)
-	for _, data := range timeSeries.Quarters {
-		currentYear, _ := strconv.Atoi(data.Year)
-		if currentYear > min && currentYear < max {
-			csv.Write([]string{data.Year + " " + data.Quarter, data.Value})
-		} else if currentYear == min {
-			minQuarter := quarterToNumber(filter.FromQuarter)
-			currentQuarter := quarterToNumber(data.Quarter)
-			if currentQuarter >= minQuarter {
-				csv.Write([]string{data.Year + " " + data.Quarter, data.Value})
-			}
-		} else if currentYear == max {
-			maxQuarter := quarterToNumber(filter.ToQuarter)
-			currentQuarter := quarterToNumber(data.Quarter)
-			if currentQuarter <= maxQuarter {
-				csv.Write([]string{data.Year + " " + data.Quarter, data.Value})
-			}
-		}
-
-	}
-}
-
-func quarterToNumber(quarter string) int {
-	value, _ := strconv.Atoi(string(quarter[1]))
-	return value
-}
-
-func filterOnMonth(csv *csv.Writer, timeSeries TimeSeries, filter DataFilter) {
-	min, _ := strconv.Atoi(filter.FromYear)
-	max, _ := strconv.Atoi(filter.ToYear)
-	for _, data := range timeSeries.Months {
-		currentYear, _ := strconv.Atoi(data.Year)
-		if currentYear > min && currentYear < max {
-			csv.Write([]string{data.Date, data.Value})
-		} else if currentYear == min {
-			minQuarter, _ := strconv.Atoi(filter.FromMonth)
-			currentQuarter := monthToNumber(data.Month)
-			if currentQuarter >= minQuarter {
-				csv.Write([]string{data.Date, data.Value})
-			}
-		} else if currentYear == max {
-			maxQuarter, _ := strconv.Atoi(filter.ToMonth)
-			currentQuarter := monthToNumber(data.Month)
-			if currentQuarter <= maxQuarter {
-				csv.Write([]string{data.Date, data.Value})
-			}
-		}
-
-	}
-}
-
-func monthToNumber(month string) int {
-	lowerCase := strings.ToLower(month)
-	switch lowerCase {
-	case "january":
-		return 1
-	case "february":
-		return 2
-	case "march":
-		return 3
-	case "april":
-		return 4
-	case "may":
-		return 5
-	case "june":
-		return 6
-	case "july":
-		return 7
-	case "august":
-		return 8
-	case "september":
-		return 9
-	case "october":
-		return 10
-	case "november":
-		return 11
-	case "december":
-		return 12
-	}
-
-	return 0
 }
 
 func main() {
