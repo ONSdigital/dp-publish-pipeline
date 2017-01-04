@@ -13,7 +13,7 @@ Example of messages
 #### Environment variables
 * `zebedee_root` defaults to "."
 * `PUBLISH_COUNT_TOPIC` defaults to "uk.gov.ons.dp.web.publish-count"
-* `COMPETE_FILE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file"
+* `COMPLETE_FILE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file"
 * `KAFKA_ADDR` defaults to "localhost:9092"
 
 #### Running a test environment
