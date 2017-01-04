@@ -17,8 +17,11 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var tick = time.Millisecond * 200
-var sched sync.Mutex
+var (
+	tick          = time.Millisecond * 200
+	maxConcurrent = 20
+	sched         sync.Mutex
+)
 
 type scheduleJob struct {
 	collectionId  string
@@ -115,6 +118,7 @@ func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, db 
 	sched.Lock()
 	defer sched.Unlock()
 	//log.Printf("%d check len:%d %v", epochTime, len(*schedule), schedule)
+	sentJobs := 0
 	for i := 0; i < len(*schedule); i++ {
 		collectionId := (*schedule)[i].collectionId
 		if collectionId == "" {
@@ -128,6 +132,10 @@ func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, db 
 			updateJob(db, message.collectionId, 0, scheduleId)
 			(*schedule)[i] = scheduleJob{collectionId: ""}
 			publishChannel <- message
+			sentJobs++
+			if maxConcurrent > 0 && sentJobs > maxConcurrent {
+				break
+			}
 		} else {
 			log.Printf("Collection %q [id %d] Not time for %d - %d > %d", collectionId, scheduleId, i, epochTime, (*schedule)[i].scheduleTime)
 		}
