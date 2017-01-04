@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/dp-publish-pipeline/xls"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -74,10 +75,10 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 	if format == "xls" {
 		w.Header().Set("Content-Disposition", "attachment; filename=data.xls")
 		w.Header().Set("Content-Type", "application/vnd.ms-excel")
-		xls := createXLSWorkbook("data")
-		defer xls.close()
-		timeSeriesToFile(xls.writeRow, timeSeries, filter)
-		xls.dumpToWriter(w)
+		xlsFile := xls.CreateXLSWorkbook("data")
+		defer xlsFile.Close()
+		timeSeriesToFile(xlsFile.WriteRow, timeSeries, filter)
+		xlsFile.DumpToWriter(w)
 	} else {
 		w.Header().Set("Content-Disposition", "attachment; filename=data.csv")
 		w.Header().Set("Content-Type", "text/csv")

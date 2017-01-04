@@ -1,4 +1,4 @@
-package main
+package xls
 
 // brew install xlslib
 import (
@@ -23,7 +23,7 @@ type XLSWorkbook struct {
 	row       int
 }
 
-func createXLSWorkbook(workSheetName string) XLSWorkbook {
+func CreateXLSWorkbook(workSheetName string) XLSWorkbook {
 	var wb XLSWorkbook
 	wb.row = 0
 	wb.workbook = C.xlsNewWorkbook()
@@ -33,7 +33,7 @@ func createXLSWorkbook(workSheetName string) XLSWorkbook {
 	return wb
 }
 
-func (wb *XLSWorkbook) writeRow(row []string) error {
+func (wb *XLSWorkbook) WriteRow(row []string) error {
 	ctitle := C.CString(row[0])
 	defer C.free(unsafe.Pointer(ctitle))
 	C.xlsWorksheetLabel(wb.worksheet, C.unsigned32_t(wb.row),
@@ -48,7 +48,7 @@ func (wb *XLSWorkbook) writeRow(row []string) error {
 	return nil
 }
 
-func (wb *XLSWorkbook) dumpToWriter(writer io.Writer) {
+func (wb *XLSWorkbook) DumpToWriter(writer io.Writer) {
 	tmpFile := uuid.NewV1()
 	fileName := C.CString(tmpFile.String())
 	defer C.free(unsafe.Pointer(fileName))
@@ -59,6 +59,6 @@ func (wb *XLSWorkbook) dumpToWriter(writer io.Writer) {
 
 }
 
-func (wb *XLSWorkbook) close() {
+func (wb *XLSWorkbook) Close() {
 	C.xlsDeleteWorkbook(unsafe.Pointer(wb.workbook))
 }
