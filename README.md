@@ -10,10 +10,10 @@ See the following pages per service
 * [Publish-receiver](publish-receiver/README.md)
 
 ### Design
-![alt Design](design.png)
+![alt Design](doc/design.png)
 
 ### Event messages
-See [Event Message](Messages.md) for details on each topic and type of message sent
+See [Event Message](doc/Messages.md) for details on each topic and type of message sent
 
 ### Test results for publishing
 Machine: AWS M4.Large instance 2VCPU and 8GB Memory
