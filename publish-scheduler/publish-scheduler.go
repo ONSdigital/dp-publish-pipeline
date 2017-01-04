@@ -207,16 +207,14 @@ func updateJob(db *sql.DB, collectionId string, completeTime, scheduleId int64) 
 	var update *sql.Stmt
 	var err error
 	dbArgs := make([]interface{}, 2, 3)
-	dbArgs[0] = collectionId
-	dbArgs[1] = completeTime
+	dbArgs[0], dbArgs[1] = collectionId, completeTime
+	sql := "UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND complete_time=0 RETURNING schedule_id"
 	if completeTime == 0 {
-		update, err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL RETURNING schedule_id")
+		sql = "UPDATE schedule SET complete_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL RETURNING schedule_id"
 		dbArgs = append(dbArgs, scheduleId)
-	} else {
-		update, err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND complete_time=0 RETURNING schedule_id")
 	}
-	if err != nil {
-		log.Panicf("DB prepare failed: %s", err.Error())
+	if update, err = db.Prepare(sql); err != nil {
+		log.Panicf("DB prepare %q failed: %s", sql, err.Error())
 	}
 	res := update.QueryRow(dbArgs...)
 	if scheduleId == 0 {
