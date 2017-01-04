@@ -1,9 +1,9 @@
 ### Publish tracker
 
-A service used to track the release of a collection and to publish the collection
-within the zebedee CMS.
+A service used to track the release of a collection and to highlight completion
+of the collection via a message on a kafka topic.
 
-Example of messages
+Examples of messages
 ```
 {"collectionId":"test-0001", "fileCount": 1 }
 
@@ -14,7 +14,9 @@ Example of messages
 * `zebedee_root` defaults to "."
 * `PUBLISH_COUNT_TOPIC` defaults to "uk.gov.ons.dp.web.publish-count"
 * `COMPLETE_FILE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file"
+* `COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete"
 * `KAFKA_ADDR` defaults to "localhost:9092"
+
 
 #### Running a test environment
 * Install kafka server ```brew install kafka```

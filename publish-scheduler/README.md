@@ -1,8 +1,8 @@
 ### Publish-scheduler
 
-A service which schedules and initiates Zebedee collections.
+A service which schedules and initiates release of Zebedee collections.
 
-Messages are received via a kafka topic. Examples of inbound messages:
+Schedule messages are received via a kafka topic (see below). Examples of inbound messages:
 ```
 {"CollectionId":"test0002","EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==","ScheduleTime":"1234567890"}
 ```
@@ -16,11 +16,24 @@ Example of an output message:
 
 #### Environment variables
 
-* KAFKA_ADDR defaults to localhost:9092
-* ZEBEDEE_ROOT defaults to ../test-data/
-* SCHEDULE_TOPIC defaults to uk.gov.ons.dp.web.schedule
-* PUBLISH_COUNT_TOPIC defaults to uk.gov.ons.dp.web.publish-count
-* PUBLISH_FILE_TOPIC defaults to uk.gov.ons.dp.web.publish-file
+* `KAFKA_ADDR` defaults to "localhost:9092"
+* `ZEBEDEE_ROOT` defaults to "../test-data/
+* `SCHEDULE_TOPIC` defaults to "uk.gov.ons.dp.web.schedule"
+* `PUBLISH_COUNT_TOPIC` defaults to "uk.gov.ons.dp.web.publish-count"
+* `PUBLISH_FILE_TOPIC` defaults to "uk.gov.ons.dp.web.publish-file"
+* `COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete"
+* `DB_ACCESS` defaults to "user=dp dbname=dp sslmode=disable"
+
+#### Installation
+
+Install and setup Postgresql:
+```
+ brew install postgresql
+ createuser --pwprompt dp
+ createdb -Odp dp
+ # create table in DB...
+ psql -U dp dp -f doc/init.sql
+```
 
 #### Running a test environment
 
