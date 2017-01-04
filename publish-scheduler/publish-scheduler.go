@@ -147,7 +147,7 @@ func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, db *sql.DB)
 }
 
 func loadSchedule(db *sql.DB, schedule *[]scheduleJob, zebedeeRoot string) {
-	query, err := db.Prepare("SELECT schedule_id, collection_id, schedule_time, encryption_key FROM schedule WHERE complete_time IS NULL")
+	query, err := db.Prepare("SELECT schedule_id, collection_id, schedule_time, encryption_key FROM schedule WHERE complete_time IS NULL ORDER BY schedule_time")
 	if err != nil {
 		log.Panicf("DB prepare failed: %s", err.Error())
 	}
