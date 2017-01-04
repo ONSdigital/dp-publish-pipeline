@@ -29,9 +29,9 @@ func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
 			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, file)
 			return
 		}
-		data, _ := json.Marshal(kafka.FileCompleteMessage{FileLocation: message.FileLocation, FileContent: string(content), CollectionId: message.CollectionId})
+		data, _ := json.Marshal(kafka.FileCompleteMessage{FileLocation: utils.GetUri(content), FileContent: string(content), CollectionId: message.CollectionId})
 		producer.Output <- data
-		log.Printf("Collection %q - Sent %s", message.CollectionId, message.FileLocation)
+		log.Printf("Collection %q - uri %s", message.CollectionId, message.FileLocation)
 	}
 }
 

@@ -1,63 +1,16 @@
 package main
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
-	"github.com/ONSdigital/dp-publish-pipeline/xls"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
-
-type TimeSeriesValue struct {
-	Date          string    `json:"date"`
-	Value         string    `json:"value"`
-	Year          string    `json:"year"`
-	Month         string    `json:"month"`
-	Quarter       string    `json:"quarter"`
-	SourceDataset string    `json:"sourceDataset"`
-	UpdateDate    time.Time `json:"updateDate"`
-}
-
-type TimeSeriesDescription struct {
-	Title             string `json:"title"`
-	NationalStatistic bool   `json:"nationalStatistic"`
-	LatestRelease     bool   `json:"latestRelease"`
-	Contact           struct {
-		Email     string `json:"email"`
-		Name      string `json:"name"`
-		Telephone string `json:"telephone"`
-	} `json:"contact"`
-	ReleaseDate        string `json:"releaseDate"`
-	NextRelease        string `json:"nextRelease"`
-	Cdid               string `json:"cdid"`
-	Unit               string `json:"unit"`
-	PreUnit            string `json:"preUnit"`
-	Source             string `json:"source"`
-	SeasonalAdjustment string `json:"seasonalAdjustment"`
-	Date               string `json:"date"`
-	Number             string `json:"number"`
-	SampleSize         int    `json:"sampleSize"`
-}
-
-type TimeSeries struct {
-	Years       []TimeSeriesValue     `json:"years"`
-	Quarters    []TimeSeriesValue     `json:"quarters"`
-	Months      []TimeSeriesValue     `json:"months"`
-	Description TimeSeriesDescription `json:"description"`
-}
-
-type Record struct {
-	FileLocation string `json:"fileLocation" bson:"fileLocation"`
-	FileContent  string `json:"fileContent" bson:"fileContent"`
-	CollectionId string `json:"collectionId" bson:"collectionId"`
-}
 
 type FileWriter func([]string) error
 
@@ -70,21 +23,13 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 	format, uri, _ := findParams(r)
 	filter := findFilterParams(r)
 	log.Printf("Got format : %s, uri: %s", format, uri)
-	timeSeries := loadTimeSeriesData(uri)
-
-	if format == "xls" {
-		w.Header().Set("Content-Disposition", "attachment; filename=data.xls")
-		w.Header().Set("Content-Type", "application/vnd.ms-excel")
-		xlsFile := xls.CreateXLSWorkbook("data")
-		defer xlsFile.Close()
-		timeSeriesToFile(xlsFile.WriteRow, timeSeries, filter)
-		xlsFile.DumpToWriter(w)
-	} else {
-		w.Header().Set("Content-Disposition", "attachment; filename=data.csv")
-		w.Header().Set("Content-Type", "text/csv")
-		csv := csv.NewWriter(w)
-		timeSeriesToFile(csv.Write, timeSeries, filter)
-		csv.Flush()
+	data := loadPageData(uri)
+	pageType := utils.GetType(data)
+	log.Printf("page Type : %s", pageType)
+	if pageType == "timeseries" {
+		downloadTimeseries(data, filter, format, w)
+	} else if pageType == "chart" {
+		downloadChart(data, format, w)
 	}
 }
 
@@ -113,8 +58,7 @@ func findFilterParams(query *http.Request) DataFilter {
 	return filter
 }
 
-func loadTimeSeriesData(uri string) TimeSeries {
-	var timeSeries TimeSeries
+func loadPageData(uri string) []byte {
 	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
 	if err != nil {
 		panic(err)
@@ -126,62 +70,24 @@ func loadTimeSeriesData(uri string) TimeSeries {
 	if foundErr != nil {
 		log.Panicf("Mongodb error : %s", foundErr.Error())
 	}
-	json.Unmarshal([]byte(record.FileContent), &timeSeries)
-	return timeSeries
-}
-
-func timeSeriesToFile(writer FileWriter, timeSeries TimeSeries, filter DataFilter) {
-	writer([]string{"Title", timeSeries.Description.Title})
-	writer([]string{"CDID", timeSeries.Description.Cdid})
-	writer([]string{"PreUnit", timeSeries.Description.PreUnit})
-	writer([]string{"Unit", timeSeries.Description.Unit})
-	writer([]string{"Release date", timeSeries.Description.ReleaseDate})
-	writer([]string{"Next release", timeSeries.Description.NextRelease})
-	writer([]string{"Important Notes", ""})
-
-	switch filter.Frequency {
-	case "year":
-		if filter.FromYear != "" && filter.ToYear != "" {
-			filterOnYears(writer, timeSeries, filter)
-		} else {
-			for _, data := range timeSeries.Years {
-				writer([]string{data.Year, data.Value})
-			}
-		}
-	case "quarter":
-		if filter.FromQuarter != "" && filter.ToQuarter != "" {
-			filterOnQuarter(writer, timeSeries, filter)
-		} else {
-			for _, data := range timeSeries.Quarters {
-				writer([]string{data.Year + " " + data.Quarter, data.Value})
-			}
-		}
-	case "month":
-		if filter.FromMonth != "" && filter.ToMonth != "" {
-			filterOnMonth(writer, timeSeries, filter)
-		} else {
-			for _, data := range timeSeries.Months {
-				writer([]string{data.Date, data.Value})
-			}
-		}
-	}
+	return []byte(record.FileContent)
 }
 
 func main() {
 	http.HandleFunc("/generator", downloadFile)
 	http.ListenAndServe(":8081", nil)
-	//UploadTimeSeriesToMongo("data.json")
+	//UploadTimeSeriesToMongo("chart.json")
 }
 
 // Function used to upload test data into mongodb
 func UploadTimeSeriesToMongo(file string) {
 	d, _ := ioutil.ReadFile(file)
-	var t TimeSeries
+	var t Chart
 	json.Unmarshal(d, &t)
 	data, _ := json.Marshal(t)
 	var record Record
 	record.CollectionId = "DataSet-456456"
-	record.FileLocation = "/peoplepopulationandcommunity/leisureandtourism/timeseries/all/data.json"
+	record.FileLocation = "/chart"
 	record.FileContent = string(data)
 	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
 	if err != nil {
