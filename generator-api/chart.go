@@ -4,6 +4,9 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"net/http"
+
+	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/dp-publish-pipeline/xls"
 )
 
 type Chart struct {
@@ -30,20 +33,34 @@ type Chart struct {
 	} `json:"files"`
 }
 
-func downloadChart(data []byte, format string, w http.ResponseWriter) {
+func generateChart(data []byte, format string, w http.ResponseWriter) {
 	var chart Chart
 	json.Unmarshal(data, &chart)
-	csvFile := csv.NewWriter(w)
-	csvFile.Write([]string{"Title", chart.Title})
-	csvFile.Write([]string{"Notes", chart.Notes})
-	headers := append(chart.Headers, "")
-	csvFile.Write(headers)
+	if format == csvFormat {
+		utils.SetCSVContentHeader(w)
+		csvFile := csv.NewWriter(w)
+		chartToWriter(csvFile.Write, chart)
+		csvFile.Flush()
+	} else if format == xlsFormat {
+		utils.SetXLSContentHeader(w)
+		wb := xls.CreateXLSWorkbook("data")
+		defer wb.Close()
+		chartToWriter(wb.WriteRow, chart)
+		wb.DumpToWriter(w)
+	}
+
+}
+
+func chartToWriter(writer FileWriter, chart Chart) {
+	writer([]string{"Title", chart.Title})
+	writer([]string{"Notes", chart.Notes})
+	headers := chart.Headers
+	writer(headers)
 	for _, set := range chart.Data {
 		row := make([]string, 0)
 		for _, header := range headers {
 			row = append(row, set[header])
 		}
-		csvFile.Write(row[:len(row)-1])
+		writer(row)
 	}
-	csvFile.Flush()
 }

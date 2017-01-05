@@ -53,9 +53,9 @@ func (wb *XLSWorkbook) DumpToWriter(writer io.Writer) {
 	fileName := C.CString(tmpFile.String())
 	defer C.free(unsafe.Pointer(fileName))
 	C.xlsWorkbookDump(wb.workbook, fileName)
-	os.Remove(tmpFile.String())
 	data, _ := os.Open(tmpFile.String())
 	io.Copy(writer, data)
+	os.Remove(tmpFile.String())
 
 }
 

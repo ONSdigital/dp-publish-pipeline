@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/ONSdigital/dp-publish-pipeline/xls"
 )
 
@@ -57,6 +58,7 @@ type TimeSeries struct {
 	Quarters    []TimeSeriesValue     `json:"quarters"`
 	Months      []TimeSeriesValue     `json:"months"`
 	Description TimeSeriesDescription `json:"description"`
+	Type        string                `json:"type"`
 }
 
 type Record struct {
@@ -65,26 +67,24 @@ type Record struct {
 	CollectionId string `json:"collectionId" bson:"collectionId"`
 }
 
-func downloadTimeseries(data []byte, filter DataFilter, format string, w http.ResponseWriter) {
+func generateTimeseries(data []byte, filter DataFilter, format string, w http.ResponseWriter) {
 	var timeSeries TimeSeries
 	json.Unmarshal(data, &timeSeries)
-	if format == "xls" {
-		w.Header().Set("Content-Disposition", "attachment; filename=data.xls")
-		w.Header().Set("Content-Type", "application/vnd.ms-excel")
+	if format == xlsFormat {
+		utils.SetXLSContentHeader(w)
 		xlsFile := xls.CreateXLSWorkbook("data")
 		defer xlsFile.Close()
-		timeSeriesToFile(xlsFile.WriteRow, timeSeries, filter)
+		timeSeriesToWriter(xlsFile.WriteRow, timeSeries, filter)
 		xlsFile.DumpToWriter(w)
-	} else {
-		w.Header().Set("Content-Disposition", "attachment; filename=data.csv")
-		w.Header().Set("Content-Type", "text/csv")
+	} else if format == csvFormat {
+		utils.SetCSVContentHeader(w)
 		csv := csv.NewWriter(w)
-		timeSeriesToFile(csv.Write, timeSeries, filter)
+		timeSeriesToWriter(csv.Write, timeSeries, filter)
 		csv.Flush()
 	}
 }
 
-func timeSeriesToFile(writer FileWriter, timeSeries TimeSeries, filter DataFilter) {
+func timeSeriesToWriter(writer FileWriter, timeSeries TimeSeries, filter DataFilter) {
 	writer([]string{"Title", timeSeries.Description.Title})
 	writer([]string{"CDID", timeSeries.Description.Cdid})
 	writer([]string{"PreUnit", timeSeries.Description.PreUnit})

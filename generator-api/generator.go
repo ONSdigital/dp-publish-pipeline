@@ -19,24 +19,37 @@ const MASTER_COLLECTION = "meta"
 
 const MONGODB_ENV = "MONGODB"
 
+const xlsFormat = "xls"
+const csvFormat = "csv"
+
 func downloadFile(w http.ResponseWriter, r *http.Request) {
-	format, uri, _ := findParams(r)
+	format, uri, err := findParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	filter := findFilterParams(r)
 	log.Printf("Got format : %s, uri: %s", format, uri)
-	data := loadPageData(uri)
+	data, err := loadPageData(uri)
+	if err != nil {
+		http.Error(w, "Content not found", http.StatusNotFound)
+		return
+	}
 	pageType := utils.GetType(data)
 	log.Printf("page Type : %s", pageType)
 	if pageType == "timeseries" {
-		downloadTimeseries(data, filter, format, w)
+		generateTimeseries(data, filter, format, w)
 	} else if pageType == "chart" {
-		downloadChart(data, format, w)
+		generateChart(data, format, w)
+	} else {
+		http.Error(w, "Unsupported type", http.StatusBadGateway)
 	}
 }
 
 func findParams(query *http.Request) (string, string, error) {
 	format := query.URL.Query().Get("format")
 	uri := query.URL.Query().Get("uri")
-	if format != "csv" && format != "xls" {
+	if format != csvFormat && format != xlsFormat {
 		return "", "", errors.New("Unsupported format : " + format)
 	}
 	if uri == "" {
@@ -58,10 +71,10 @@ func findFilterParams(query *http.Request) DataFilter {
 	return filter
 }
 
-func loadPageData(uri string) []byte {
+func loadPageData(uri string) ([]byte, error) {
 	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	defer dbSession.Close()
 	db := dbSession.DB(DATA_BASE)
@@ -70,7 +83,7 @@ func loadPageData(uri string) []byte {
 	if foundErr != nil {
 		log.Panicf("Mongodb error : %s", foundErr.Error())
 	}
-	return []byte(record.FileContent)
+	return []byte(record.FileContent), nil
 }
 
 func main() {
