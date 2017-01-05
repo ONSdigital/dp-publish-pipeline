@@ -18,10 +18,17 @@ import (
 )
 
 var (
-	tick          = time.Millisecond * 200
-	maxConcurrent = 20
-	sched         sync.Mutex
+	tick             = time.Millisecond * 330
+	inFlight         = 0
+	maxInFlight      = 40
+	maxLaunchPerTick = 20
+	sched            sync.Mutex
 )
+
+type dbMetaObj struct {
+	db      *sql.DB
+	prepped map[string]*sql.Stmt
+}
 
 type scheduleJob struct {
 	collectionId  string
@@ -66,10 +73,10 @@ func publishCollection(message scheduleJob, fileProducerChannel, totalProducerCh
 		}
 		fileProducerChannel <- data
 	}
-	log.Printf("Collection %q [id %d]- sent %d files", message.collectionId, message.scheduleId, len(message.files))
+	log.Printf("Collection %q [id %d] sent %d files", message.collectionId, message.scheduleId, len(message.files))
 }
 
-func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot string, db *sql.DB) {
+func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot string, dbMeta dbMetaObj) {
 	var message kafka.ScheduleMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
@@ -80,6 +87,7 @@ func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot
 		if err != nil {
 			log.Panicf("Collection %q Cannot numeric convert: %q", message.CollectionId, message.ScheduleTime)
 		}
+		scheduleTime *= 1000000000 // convert from epoch (seconds) to epoch-nanoseconds (UnixNano)
 		newJob := scheduleJob{collectionId: message.CollectionId, scheduleTime: scheduleTime, encryptionKey: message.EncryptionKey}
 
 		addIndex := -1
@@ -102,23 +110,25 @@ func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot
 		newJob.files = make([]string, len(files))
 		copy(newJob.files, files)
 
-		newJob.scheduleId = storeJob(db, newJob)
+		newJob.scheduleId = storeJob(dbMeta, newJob)
 
 		if addIndex == -1 {
 			*schedule = append(*schedule, newJob)
+			addIndex = len(*schedule) - 1
 		} else {
 			(*schedule)[addIndex] = newJob
 		}
-		log.Printf("Collection %q [id %d] schedule now len:%d files:%d", message.CollectionId, newJob.scheduleId, len(*schedule), len(newJob.files))
+		log.Printf("Collection %q [id %d] schedule new idx %d now len:%d files:%d", message.CollectionId, newJob.scheduleId, addIndex, len(*schedule), len(newJob.files))
 	}
 }
 
-func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, db *sql.DB) {
-	epochTime := time.Now().Unix()
+func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, dbMeta dbMetaObj) {
+	epochTime := time.Now().UnixNano()
+	launchedThisTick := 0
+
 	sched.Lock()
 	defer sched.Unlock()
-	//log.Printf("%d check len:%d %v", epochTime, len(*schedule), schedule)
-	sentJobs := 0
+
 	for i := 0; i < len(*schedule); i++ {
 		collectionId := (*schedule)[i].collectionId
 		if collectionId == "" {
@@ -126,49 +136,51 @@ func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, db 
 		}
 		scheduleId := (*schedule)[i].scheduleId
 		if (*schedule)[i].scheduleTime <= epochTime {
-			log.Printf("Collection %q [id %d] found %d", collectionId, scheduleId, i)
-			// message := kafka.ScheduleMessage{CollectionId: collectionId, EncryptionKey: (*schedule)[i].encryptionKey}
+			if (maxLaunchPerTick > 0 && launchedThisTick >= maxLaunchPerTick) || (maxInFlight > 0 && inFlight >= maxInFlight) {
+				log.Printf("Collection %q [id %d] skip busy idx[%d]- this-tick: %d/%d in-flight: %d/%d", collectionId, scheduleId, i, launchedThisTick, maxLaunchPerTick, inFlight, maxInFlight)
+				continue
+			}
+			log.Printf("Collection %q [id %d] found idx[%d] + in-flight: %d", collectionId, scheduleId, i, inFlight)
 			message := (*schedule)[i]
-			updateJob(db, message.collectionId, 0, scheduleId)
+			updateJob(dbMeta, message.collectionId, 0, scheduleId)
 			(*schedule)[i] = scheduleJob{collectionId: ""}
 			publishChannel <- message
-			sentJobs++
-			if maxConcurrent > 0 && sentJobs > maxConcurrent {
-				break
-			}
+			launchedThisTick++
+			inFlight++
 		} else {
-			log.Printf("Collection %q [id %d] Not time for %d - %d > %d", collectionId, scheduleId, i, epochTime, (*schedule)[i].scheduleTime)
+			log.Printf("Collection %q [id %d] Not time for idx %d - %d > %d", collectionId, scheduleId, i, epochTime, (*schedule)[i].scheduleTime)
 		}
 	}
 }
 
-func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, db *sql.DB) {
+func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, dbMeta dbMetaObj) {
 	var message kafka.CollectionCompleteMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
 	} else if len(message.CollectionId) == 0 {
 		log.Panicf("Empty collectionId: %v", jsonMessage)
 	} else {
-		id := updateJob(db, message.CollectionId, time.Now().Unix(), 0)
-		log.Printf("Collection %q [id %d] completed", message.CollectionId, id)
+		nowNano := time.Now().UnixNano()
+		id, startNano := updateJob(dbMeta, message.CollectionId, nowNano, 0)
+		sched.Lock()
+		inFlight--
+		log.Printf("Collection %q [id %d] completed in %s - in-flight: %d", message.CollectionId, id, time.Duration(nowNano-startNano)*time.Nanosecond, inFlight)
+		sched.Unlock()
 	}
 }
 
-func loadSchedule(db *sql.DB, schedule *[]scheduleJob, zebedeeRoot string) {
-	query, err := db.Prepare("SELECT schedule_id, collection_id, schedule_time, encryption_key FROM schedule WHERE complete_time IS NULL ORDER BY schedule_time")
-	if err != nil {
-		log.Panicf("DB prepare failed: %s", err.Error())
-	}
-
-	rows, err := query.Query()
+func loadSchedule(dbMeta dbMetaObj, schedule *[]scheduleJob, zebedeeRoot string) {
+	rows, err := dbMeta.prepped["load"].Query()
 	defer rows.Close()
 
+	startedCount := 0
 	for rows.Next() {
-		var collectionId, encryptionKey sql.NullString
-		var scheduleTime sql.NullInt64
-		var scheduleId sql.NullInt64
+		var (
+			collectionId, encryptionKey            sql.NullString
+			scheduleTime, scheduleId, completeTime sql.NullInt64
+		)
 
-		if err = rows.Scan(&scheduleId, &collectionId, &scheduleTime, &encryptionKey); err != nil {
+		if err = rows.Scan(&scheduleId, &collectionId, &scheduleTime, &encryptionKey, &completeTime); err != nil {
 			log.Fatal(err)
 		}
 
@@ -182,47 +194,43 @@ func loadSchedule(db *sql.DB, schedule *[]scheduleJob, zebedeeRoot string) {
 		copy(job.files, files)
 
 		*schedule = append(*schedule, job)
+		if !completeTime.Valid {
+			startedCount++
+		}
 	}
 	if err = rows.Err(); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Loaded %d jobs", len(*schedule))
+	log.Printf("Loaded %d jobs - %d to restart", len(*schedule), startedCount)
 }
 
-func storeJob(db *sql.DB, job scheduleJob) int64 {
-	insert, err := db.Prepare("INSERT INTO schedule (collection_id, schedule_time, encryption_key, complete_time) VALUES ($1, $2, $3, NULL) RETURNING schedule_id")
-	if err != nil {
-		log.Panicf("DB prepare failed: %s", err.Error())
-	}
-	res := insert.QueryRow(job.collectionId, job.scheduleTime, job.encryptionKey)
+func storeJob(dbMeta dbMetaObj, job scheduleJob) int64 {
+	res := dbMeta.prepped["store"].QueryRow(job.collectionId, job.scheduleTime, job.encryptionKey)
 	var scheduleId int64
-	if err = res.Scan(&scheduleId); err != nil {
+	if err := res.Scan(&scheduleId); err != nil {
 		log.Panic(err)
 	}
 	return scheduleId
 }
 
-func updateJob(db *sql.DB, collectionId string, completeTime, scheduleId int64) int64 {
+func updateJob(dbMeta dbMetaObj, collectionId string, completeTime, scheduleId int64) (int64, int64) {
 	// if completeTime==0, the job is being started...
-	var update *sql.Stmt
-	var err error
+	var (
+		err       error
+		startTime sql.NullInt64
+	)
 	dbArgs := make([]interface{}, 2, 3)
 	dbArgs[0], dbArgs[1] = collectionId, completeTime
-	sql := "UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND complete_time=0 RETURNING schedule_id"
+	sqlTag := "update-complete"
 	if completeTime == 0 {
-		sql = "UPDATE schedule SET complete_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL RETURNING schedule_id"
+		sqlTag = "update-publish"
 		dbArgs = append(dbArgs, scheduleId)
 	}
-	if update, err = db.Prepare(sql); err != nil {
-		log.Panicf("DB prepare %q failed: %s", sql, err.Error())
+	res := dbMeta.prepped[sqlTag].QueryRow(dbArgs...)
+	if err = res.Scan(&scheduleId, &startTime); err != nil {
+		log.Panic(err)
 	}
-	res := update.QueryRow(dbArgs...)
-	if scheduleId == 0 {
-		if err = res.Scan(&scheduleId); err != nil {
-			log.Panic(err)
-		}
-	}
-	return scheduleId
+	return scheduleId, startTime.Int64
 }
 
 func main() {
@@ -244,10 +252,28 @@ func main() {
 	if err = db.Ping(); err != nil {
 		log.Panicf("Error: Could not establish a connection with the database: %s", err.Error())
 	}
+	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
+	//	dbMeta.prepped = make(map[string]*sql.Stmt)
+	dbMeta.prepped["load"], err = db.Prepare("SELECT schedule_id, collection_id, schedule_time, encryption_key, complete_time FROM schedule WHERE complete_time IS NULL OR complete_time=0 ORDER BY schedule_time")
+	if err != nil {
+		log.Panicf("Error: Could not prepate %q statement on database: %s", "load", err.Error())
+	}
+	dbMeta.prepped["store"], err = db.Prepare("INSERT INTO schedule (collection_id, schedule_time, encryption_key, complete_time) VALUES ($1, $2, $3, NULL) RETURNING schedule_id")
+	if err != nil {
+		log.Panicf("Error: Could not prepate %q statement on database: %s", "store", err.Error())
+	}
+	dbMeta.prepped["update-complete"], err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND complete_time=0 RETURNING schedule_id, schedule_time")
+	if err != nil {
+		log.Panicf("Error: Could not prepate %q statement on database: %s", "update-complete", err.Error())
+	}
+	dbMeta.prepped["update-publish"], err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL RETURNING schedule_id, schedule_time")
+	if err != nil {
+		log.Panicf("Error: Could not prepate %q statement on database: %s", "update-publish", err.Error())
+	}
 
 	schedule := make([]scheduleJob, 0, 10)
 
-	loadSchedule(db, &schedule, zebedeeRoot)
+	loadSchedule(dbMeta, &schedule, zebedeeRoot)
 
 	log.Printf("Starting publish scheduler from %q topics: %q -> %q/%q", zebedeeRoot, scheduleTopic, produceFileTopic, produceTotalTopic)
 
@@ -263,13 +289,13 @@ func main() {
 		for {
 			select {
 			case scheduleMessage := <-scheduleConsumer.Incoming:
-				go scheduleCollection(scheduleMessage, &schedule, zebedeeRoot, db)
+				go scheduleCollection(scheduleMessage, &schedule, zebedeeRoot, dbMeta)
 			case publishMessage := <-publishChannel:
 				go publishCollection(publishMessage, fileProducer.Output, totalProducer.Output)
 			case completeMessage := <-completeConsumer.Incoming:
-				go completeCollection(completeMessage, &schedule, db)
+				go completeCollection(completeMessage, &schedule, dbMeta)
 			case <-time.After(tick):
-				go checkSchedule(&schedule, publishChannel, db)
+				go checkSchedule(&schedule, publishChannel, dbMeta)
 			}
 		}
 	}()
