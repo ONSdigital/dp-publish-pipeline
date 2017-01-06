@@ -99,7 +99,7 @@ func timeSeriesToWriter(writer FileWriter, timeSeries TimeSeries, filter DataFil
 			filterOnYears(writer, timeSeries, filter)
 		} else {
 			for _, data := range timeSeries.Years {
-				writer([]string{data.Year, data.Value})
+				writer([]string{data.Date, data.Value})
 			}
 		}
 	case "quarter":
@@ -107,7 +107,7 @@ func timeSeriesToWriter(writer FileWriter, timeSeries TimeSeries, filter DataFil
 			filterOnQuarter(writer, timeSeries, filter)
 		} else {
 			for _, data := range timeSeries.Quarters {
-				writer([]string{data.Year + " " + data.Quarter, data.Value})
+				writer([]string{data.Date, data.Value})
 			}
 		}
 	case "month":

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -17,7 +15,7 @@ type FileWriter func([]string) error
 const DATA_BASE = "onswebsite"
 const MASTER_COLLECTION = "meta"
 
-const MONGODB_ENV = "MONGODB"
+const MONGODB_HOST = "MONGODB"
 
 const xlsFormat = "xls"
 const csvFormat = "csv"
@@ -42,7 +40,7 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 	} else if pageType == "chart" {
 		generateChart(data, format, w)
 	} else {
-		http.Error(w, "Unsupported type", http.StatusBadGateway)
+		http.Error(w, "Unsupported type", http.StatusBadRequest)
 	}
 }
 
@@ -72,41 +70,22 @@ func findFilterParams(query *http.Request) DataFilter {
 }
 
 func loadPageData(uri string) ([]byte, error) {
-	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
+	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_HOST, "localhost"))
 	if err != nil {
 		return nil, err
 	}
 	defer dbSession.Close()
 	db := dbSession.DB(DATA_BASE)
 	var record Record
-	foundErr := db.C(MASTER_COLLECTION).Find(bson.M{"fileLocation": uri}).One(&record)
-	if foundErr != nil {
-		log.Panicf("Mongodb error : %s", foundErr.Error())
+	notFoundErr := db.C(MASTER_COLLECTION).Find(bson.M{"fileLocation": uri}).One(&record)
+	if notFoundErr != nil {
+		return nil, notFoundErr
 	}
 	return []byte(record.FileContent), nil
 }
 
 func main() {
+	port := utils.GetEnvironmentVariable("PORT", "8081")
 	http.HandleFunc("/generator", downloadFile)
-	http.ListenAndServe(":8081", nil)
-	//UploadTimeSeriesToMongo("chart.json")
-}
-
-// Function used to upload test data into mongodb
-func UploadTimeSeriesToMongo(file string) {
-	d, _ := ioutil.ReadFile(file)
-	var t Chart
-	json.Unmarshal(d, &t)
-	data, _ := json.Marshal(t)
-	var record Record
-	record.CollectionId = "DataSet-456456"
-	record.FileLocation = "/chart"
-	record.FileContent = string(data)
-	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
-	if err != nil {
-		panic(err)
-	}
-	defer dbSession.Close()
-	db := dbSession.DB(DATA_BASE)
-	db.C("meta").Insert(record)
+	http.ListenAndServe(":"+port, nil)
 }

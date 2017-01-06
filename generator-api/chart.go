@@ -52,8 +52,12 @@ func generateChart(data []byte, format string, w http.ResponseWriter) {
 }
 
 func chartToWriter(writer FileWriter, chart Chart) {
-	writer([]string{"Title", chart.Title})
+	writer([]string{chart.Title})
+	writer([]string{chart.Subtitle})
+	writer([]string{""})
 	writer([]string{"Notes", chart.Notes})
+	writer([]string{"Unit", chart.Unit})
+	writer([]string{""})
 	headers := chart.Headers
 	writer(headers)
 	for _, set := range chart.Data {
