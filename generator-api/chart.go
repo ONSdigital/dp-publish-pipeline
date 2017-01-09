@@ -51,7 +51,7 @@ func generateChart(data []byte, format string, w http.ResponseWriter) {
 
 }
 
-func chartToWriter(writer FileWriter, chart Chart) {
+func chartToWriter(writer fileWriter, chart Chart) {
 	writer([]string{chart.Title})
 	writer([]string{chart.Subtitle})
 	writer([]string{""})

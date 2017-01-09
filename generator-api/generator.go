@@ -10,12 +10,12 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-type FileWriter func([]string) error
+type fileWriter func([]string) error
 
-const DATA_BASE = "onswebsite"
-const MASTER_COLLECTION = "meta"
+const dataBase = "onswebsite"
+const metaCollection = "meta"
 
-const MONGODB_HOST = "MONGODB"
+const mongodbHost = "MONGODB"
 
 const xlsFormat = "xls"
 const csvFormat = "csv"
@@ -70,14 +70,14 @@ func findFilterParams(query *http.Request) DataFilter {
 }
 
 func loadPageData(uri string) ([]byte, error) {
-	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_HOST, "localhost"))
+	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
 	if err != nil {
 		return nil, err
 	}
 	defer dbSession.Close()
-	db := dbSession.DB(DATA_BASE)
+	db := dbSession.DB(dataBase)
 	var record Record
-	notFoundErr := db.C(MASTER_COLLECTION).Find(bson.M{"fileLocation": uri}).One(&record)
+	notFoundErr := db.C(metaCollection).Find(bson.M{"fileLocation": uri}).One(&record)
 	if notFoundErr != nil {
 		return nil, notFoundErr
 	}

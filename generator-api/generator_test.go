@@ -175,7 +175,7 @@ func TestNoParameters(t *testing.T) {
 }
 
 func isMongodbAvailable() bool {
-	session, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_HOST, "localhost"))
+	session, err := mgo.Dial(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
 	if err != nil {
 		return false
 	} else {
@@ -205,11 +205,11 @@ func AddTestData(url string, data []byte) {
 	record.CollectionId = "DataSet-456456"
 	record.FileLocation = url
 	record.FileContent = string(data)
-	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_HOST, "localhost"))
+	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
 	if err != nil {
 		panic(err)
 	}
 	defer dbSession.Close()
-	db := dbSession.DB(DATA_BASE)
-	db.C("meta").Insert(record)
+	db := dbSession.DB(dataBase)
+	db.C(metaCollection).Insert(record)
 }

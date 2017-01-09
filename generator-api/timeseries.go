@@ -84,7 +84,7 @@ func generateTimeseries(data []byte, filter DataFilter, format string, w http.Re
 	}
 }
 
-func timeSeriesToWriter(writer FileWriter, timeSeries TimeSeries, filter DataFilter) {
+func timeSeriesToWriter(writer fileWriter, timeSeries TimeSeries, filter DataFilter) {
 	writer([]string{"Title", timeSeries.Description.Title})
 	writer([]string{"CDID", timeSeries.Description.Cdid})
 	writer([]string{"PreUnit", timeSeries.Description.PreUnit})
@@ -121,7 +121,7 @@ func timeSeriesToWriter(writer FileWriter, timeSeries TimeSeries, filter DataFil
 	}
 }
 
-func filterOnYears(fileWriter FileWriter, timeSeries TimeSeries, filter DataFilter) {
+func filterOnYears(fileWriter fileWriter, timeSeries TimeSeries, filter DataFilter) {
 	min, _ := strconv.Atoi(filter.FromYear)
 	max, _ := strconv.Atoi(filter.ToYear)
 	for _, data := range timeSeries.Years {
@@ -132,7 +132,7 @@ func filterOnYears(fileWriter FileWriter, timeSeries TimeSeries, filter DataFilt
 	}
 }
 
-func filterOnQuarter(fileWriter FileWriter, timeSeries TimeSeries, filter DataFilter) {
+func filterOnQuarter(fileWriter fileWriter, timeSeries TimeSeries, filter DataFilter) {
 	min, _ := strconv.Atoi(filter.FromYear)
 	max, _ := strconv.Atoi(filter.ToYear)
 	for _, data := range timeSeries.Quarters {
@@ -161,7 +161,7 @@ func quarterToNumber(quarter string) int {
 	return value
 }
 
-func filterOnMonth(fileWriter FileWriter, timeSeries TimeSeries, filter DataFilter) {
+func filterOnMonth(fileWriter fileWriter, timeSeries TimeSeries, filter DataFilter) {
 	min, _ := strconv.Atoi(filter.FromYear)
 	max, _ := strconv.Atoi(filter.ToYear)
 	for _, data := range timeSeries.Months {
