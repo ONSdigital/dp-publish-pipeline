@@ -144,7 +144,7 @@ func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, dbM
 			}
 			startTime := time.Now().UnixNano()
 			log.Printf("Collection %q [id %d] found idx[%d] + in-flight: %d - start: %d", collectionId, scheduleId, i, inFlight, startTime)
-			updateJob(dbMeta, collectionId, startTime, 0, scheduleId)
+			updateJobAsStarted(dbMeta, scheduleId, collectionId, startTime)
 			(*schedule)[i].isInFlight = true
 			publishChannel <- job
 			launchedThisTick++
@@ -178,10 +178,10 @@ func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, dbMeta dbMe
 		if foundScheduleIdx == -1 {
 			log.Panicf("Failed to find completed job %q in schedule", message.CollectionId)
 		}
-		id, startTime := updateJob(dbMeta, message.CollectionId, 0, completeTime, (*schedule)[foundScheduleIdx].scheduleId)
+		scheduleId, startTime := updateJobAsComplete(dbMeta, message.CollectionId, completeTime)
 		(*schedule)[foundScheduleIdx] = scheduleJob{}
 		inFlight--
-		log.Printf("Collection %q [id %d] completed in %s - in-flight: %d", message.CollectionId, id, time.Duration(completeTime-startTime)*time.Nanosecond, inFlight)
+		log.Printf("Collection %q [id %d] completed in %s - in-flight: %d", message.CollectionId, scheduleId, time.Duration(completeTime-startTime)*time.Nanosecond, inFlight)
 	}
 }
 
@@ -226,26 +226,23 @@ func storeJob(dbMeta dbMetaObj, job scheduleJob) int64 {
 	return scheduleId
 }
 
-func updateJob(dbMeta dbMetaObj, collectionId string, startTime, completeTime, scheduleId int64) (int64, int64) {
-	var (
-		err           error
-		origStartTime sql.NullInt64
-	)
-	dbArgs := make([]interface{}, 2, 3)
-	dbArgs[0] = collectionId
-	sqlTag := "update-complete"
-	if startTime != 0 {
-		sqlTag = "update-publish"
-		dbArgs[1] = startTime
-		dbArgs = append(dbArgs, scheduleId)
-	} else {
-		dbArgs[1] = completeTime
-	}
-	res := dbMeta.prepped[sqlTag].QueryRow(dbArgs...)
-	if err = res.Scan(&scheduleId, &origStartTime); err != nil {
+func updateJobAsStarted(dbMeta dbMetaObj, scheduleId int64, collectionId string, startTime int64) {
+	_, err := dbMeta.prepped["update-publish"].Exec(collectionId, startTime, scheduleId)
+	if err != nil {
 		log.Panic(err)
 	}
-	return scheduleId, origStartTime.Int64
+}
+
+func updateJobAsComplete(dbMeta dbMetaObj, collectionId string, completeTime int64) (int64, int64) {
+	var (
+		startTime  sql.NullInt64
+		scheduleId int64
+	)
+	res := dbMeta.prepped["update-complete"].QueryRow(collectionId, completeTime)
+	if err := res.Scan(&scheduleId, &startTime); err != nil {
+		log.Panic(err)
+	}
+	return scheduleId, startTime.Int64
 }
 
 func main() {
@@ -281,7 +278,7 @@ func main() {
 	if err != nil {
 		log.Panicf("Error: Could not prepare %q statement on database: %s", "update-complete", err.Error())
 	}
-	dbMeta.prepped["update-publish"], err = db.Prepare("UPDATE schedule SET start_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL RETURNING schedule_id, start_time")
+	dbMeta.prepped["update-publish"], err = db.Prepare("UPDATE schedule SET start_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL")
 	if err != nil {
 		log.Panicf("Error: Could not prepare %q statement on database: %s", "update-publish", err.Error())
 	}
