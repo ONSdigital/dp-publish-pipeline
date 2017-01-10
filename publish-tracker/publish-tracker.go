@@ -103,18 +103,20 @@ func main() {
 	completeCollectionTopic := utils.GetEnvironmentVariable("COMPLETE_TOPIC", "uk.gov.ons.dp.web.complete")
 	log.Printf("Starting publish tracker of %q and %q to %q", completeFileTopic, publishCountTopic, completeCollectionTopic)
 
-	fileConsumer := kafka.NewConsumer(completeFileTopic)
-	collectionConsumer := kafka.NewConsumer(publishCountTopic)
+	fileConsumer := kafka.NewConsumerGroup(completeFileTopic, "publish-tracker")
+	collectionConsumer := kafka.NewConsumerGroup(publishCountTopic, "publish-tracker")
 	//signals := make(chan os.Signal, 1)
 	//signal.Notify(signals, os.Interrupt)
 	producer := kafka.NewProducer(completeCollectionTopic)
 
 	for {
 		select {
-		case msg := <-collectionConsumer.Incoming:
-			trackNewRelease(msg, producer)
-		case msg := <-fileConsumer.Incoming:
-			trackInprogressRelease(msg, producer)
+		case consumerMessage := <-collectionConsumer.Incoming:
+			trackNewRelease(consumerMessage.GetData(), producer)
+			consumerMessage.Commit()
+		case consumerMessage := <-fileConsumer.Incoming:
+			trackInprogressRelease(consumerMessage.GetData(), producer)
+			consumerMessage.Commit()
 			//case <-signals:
 			//log.Printf("Stopped publish tracker")
 			//return
