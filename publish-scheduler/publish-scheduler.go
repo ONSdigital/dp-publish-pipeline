@@ -248,7 +248,7 @@ func (dbMeta dbMetaObj) prep(tag, sql string) {
 	var err error
 	dbMeta.prepped[tag], err = dbMeta.db.Prepare(sql)
 	if err != nil {
-		log.Panicf("Error: Could not prepare %q statement on database: %s", "load", err.Error())
+		log.Panicf("Error: Could not prepare %q statement on database: %s", tag, err.Error())
 	}
 }
 
