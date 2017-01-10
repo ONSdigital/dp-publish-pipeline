@@ -89,7 +89,6 @@ func addMetaDocument(collection mgo.Collection, doc MetaSet) {
 func main() {
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
 	fileCompleteConsumer := kafka.NewConsumer(fileCompleteTopic)
-	log.Printf("Started publish receiver on %q", fileCompleteTopic)
 
 	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
 	if err != nil {
@@ -97,6 +96,7 @@ func main() {
 	}
 	defer dbSession.Close()
 	db := dbSession.DB(DATA_BASE)
+	log.Printf("Started publish receiver on %q", fileCompleteTopic)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)

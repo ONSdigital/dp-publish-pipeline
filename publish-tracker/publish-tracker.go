@@ -17,7 +17,7 @@ type Tracker struct {
 
 func (t *Tracker) Update(file kafka.FileCompleteMessage) bool {
 	t.Files = append(t.Files, file.FileLocation)
-	log.Printf("Collection %q - Progress %d/%d", t.CollectionId, len(t.Files), t.Total)
+	log.Printf("Collection %q - Progress %d/%d - %s", t.CollectionId, len(t.Files), t.Total, file.FileLocation)
 	return t.IsFinished()
 }
 
@@ -42,7 +42,7 @@ func trackNewRelease(jsonMessage []byte, producer kafka.Producer) {
 		return
 	}
 	if newCollection.CollectionId == "" || newCollection.FileCount == 0 {
-		log.Printf("Json message is mising fields : %s", string(jsonMessage))
+		log.Printf("Json message is missing fields : %s", string(jsonMessage))
 		return
 	}
 

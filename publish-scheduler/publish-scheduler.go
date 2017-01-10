@@ -36,6 +36,7 @@ type scheduleJob struct {
 	encryptionKey string
 	scheduleTime  int64
 	files         []string
+	isInFlight    bool
 }
 
 func findCollectionFiles(zebedeeRoot, collectionId string) ([]string, error) {
@@ -54,26 +55,26 @@ func findCollectionFiles(zebedeeRoot, collectionId string) ([]string, error) {
 	return files, nil
 }
 
-func publishCollection(message scheduleJob, fileProducerChannel, totalProducerChannel chan []byte) {
-	if message.collectionId == "" {
-		log.Panicf("Bad message: %v", message)
+func publishCollection(job scheduleJob, fileProducerChannel, totalProducerChannel chan []byte) {
+	if job.collectionId == "" {
+		log.Panicf("Bad message: %v", job)
 	}
 
 	var data []byte
 	var err error
 
-	if data, err = json.Marshal(kafka.PublishTotalMessage{message.collectionId, len(message.files)}); err != nil {
+	if data, err = json.Marshal(kafka.PublishTotalMessage{job.collectionId, len(job.files)}); err != nil {
 		log.Panic(err)
 	}
 	totalProducerChannel <- data
 
-	for i := 0; i < len(message.files); i++ {
-		if data, err = json.Marshal(kafka.PublishFileMessage{message.collectionId, message.encryptionKey, message.files[i]}); err != nil {
+	for i := 0; i < len(job.files); i++ {
+		if data, err = json.Marshal(kafka.PublishFileMessage{job.collectionId, job.encryptionKey, job.files[i]}); err != nil {
 			log.Panic(err)
 		}
 		fileProducerChannel <- data
 	}
-	log.Printf("Collection %q [id %d] sent %d files", message.collectionId, message.scheduleId, len(message.files))
+	log.Printf("Collection %q [id %d] sent %d files", job.collectionId, job.scheduleId, len(job.files))
 }
 
 func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot string, dbMeta dbMetaObj) {
@@ -118,7 +119,7 @@ func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot
 		} else {
 			(*schedule)[addIndex] = newJob
 		}
-		log.Printf("Collection %q [id %d] schedule new idx %d now len:%d files:%d", message.CollectionId, newJob.scheduleId, addIndex, len(*schedule), len(newJob.files))
+		log.Printf("Collection %q [id %d] schedule new idx %d now len:%d files:%d", newJob.collectionId, newJob.scheduleId, addIndex, len(*schedule), len(newJob.files))
 	}
 }
 
@@ -130,25 +131,26 @@ func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, dbM
 	defer sched.Unlock()
 
 	for i := 0; i < len(*schedule); i++ {
-		collectionId := (*schedule)[i].collectionId
-		if collectionId == "" {
+		job := (*schedule)[i]
+		collectionId := job.collectionId
+		if collectionId == "" || job.isInFlight {
 			continue
 		}
-		scheduleId := (*schedule)[i].scheduleId
-		if (*schedule)[i].scheduleTime <= epochTime {
+		scheduleId := job.scheduleId
+		if job.scheduleTime <= epochTime {
 			if (maxLaunchPerTick > 0 && launchedThisTick >= maxLaunchPerTick) || (maxInFlight > 0 && inFlight >= maxInFlight) {
 				log.Printf("Collection %q [id %d] skip busy idx[%d]- this-tick: %d/%d in-flight: %d/%d", collectionId, scheduleId, i, launchedThisTick, maxLaunchPerTick, inFlight, maxInFlight)
 				continue
 			}
-			log.Printf("Collection %q [id %d] found idx[%d] + in-flight: %d", collectionId, scheduleId, i, inFlight)
-			message := (*schedule)[i]
-			updateJob(dbMeta, message.collectionId, 0, scheduleId)
-			(*schedule)[i] = scheduleJob{collectionId: ""}
-			publishChannel <- message
+			startTime := time.Now().UnixNano()
+			log.Printf("Collection %q [id %d] found idx[%d] + in-flight: %d - start: %d", collectionId, scheduleId, i, inFlight, startTime)
+			updateJob(dbMeta, collectionId, startTime, 0, scheduleId)
+			(*schedule)[i].isInFlight = true
+			publishChannel <- job
 			launchedThisTick++
 			inFlight++
 		} else {
-			log.Printf("Collection %q [id %d] Not time for idx %d - %d > %d", collectionId, scheduleId, i, epochTime, (*schedule)[i].scheduleTime)
+			log.Printf("Collection %q [id %d] Not time for idx %d - %d > %d", collectionId, scheduleId, i, epochTime, job.scheduleTime)
 		}
 	}
 }
@@ -160,12 +162,26 @@ func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, dbMeta dbMe
 	} else if len(message.CollectionId) == 0 {
 		log.Panicf("Empty collectionId: %v", jsonMessage)
 	} else {
-		nowNano := time.Now().UnixNano()
-		id, startNano := updateJob(dbMeta, message.CollectionId, nowNano, 0)
+		completeTime := time.Now().UnixNano()
+
 		sched.Lock()
+		defer sched.Unlock()
+
+		foundScheduleIdx := -1
+		for i := 0; i < len(*schedule); i++ {
+			job := (*schedule)[i]
+			if job.collectionId == message.CollectionId {
+				foundScheduleIdx = i
+				break
+			}
+		}
+		if foundScheduleIdx == -1 {
+			log.Panicf("Failed to find completed job %q in schedule", message.CollectionId)
+		}
+		id, startTime := updateJob(dbMeta, message.CollectionId, 0, completeTime, (*schedule)[foundScheduleIdx].scheduleId)
+		(*schedule)[foundScheduleIdx] = scheduleJob{}
 		inFlight--
-		log.Printf("Collection %q [id %d] completed in %s - in-flight: %d", message.CollectionId, id, time.Duration(nowNano-startNano)*time.Nanosecond, inFlight)
-		sched.Unlock()
+		log.Printf("Collection %q [id %d] completed in %s - in-flight: %d", message.CollectionId, id, time.Duration(completeTime-startTime)*time.Nanosecond, inFlight)
 	}
 }
 
@@ -173,18 +189,18 @@ func loadSchedule(dbMeta dbMetaObj, schedule *[]scheduleJob, zebedeeRoot string)
 	rows, err := dbMeta.prepped["load"].Query()
 	defer rows.Close()
 
-	startedCount := 0
 	for rows.Next() {
 		var (
-			collectionId, encryptionKey            sql.NullString
-			scheduleTime, scheduleId, completeTime sql.NullInt64
+			collectionId, encryptionKey           sql.NullString
+			scheduleTime, startTime, completeTime sql.NullInt64
+			scheduleId                            int64
 		)
 
-		if err = rows.Scan(&scheduleId, &collectionId, &scheduleTime, &encryptionKey, &completeTime); err != nil {
+		if err = rows.Scan(&scheduleId, &collectionId, &scheduleTime, &encryptionKey, &startTime, &completeTime); err != nil {
 			log.Fatal(err)
 		}
 
-		job := scheduleJob{scheduleId: scheduleId.Int64, scheduleTime: scheduleTime.Int64, collectionId: collectionId.String, encryptionKey: encryptionKey.String}
+		job := scheduleJob{scheduleId: scheduleId, scheduleTime: scheduleTime.Int64, collectionId: collectionId.String, encryptionKey: encryptionKey.String}
 		var files []string
 		if files, err = findCollectionFiles(zebedeeRoot, job.collectionId); err != nil {
 			log.Panic(err)
@@ -194,14 +210,11 @@ func loadSchedule(dbMeta dbMetaObj, schedule *[]scheduleJob, zebedeeRoot string)
 		copy(job.files, files)
 
 		*schedule = append(*schedule, job)
-		if !completeTime.Valid {
-			startedCount++
-		}
 	}
 	if err = rows.Err(); err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Loaded %d jobs - %d to restart", len(*schedule), startedCount)
+	log.Printf("Loaded %d jobs", len(*schedule))
 }
 
 func storeJob(dbMeta dbMetaObj, job scheduleJob) int64 {
@@ -213,24 +226,26 @@ func storeJob(dbMeta dbMetaObj, job scheduleJob) int64 {
 	return scheduleId
 }
 
-func updateJob(dbMeta dbMetaObj, collectionId string, completeTime, scheduleId int64) (int64, int64) {
-	// if completeTime==0, the job is being started...
+func updateJob(dbMeta dbMetaObj, collectionId string, startTime, completeTime, scheduleId int64) (int64, int64) {
 	var (
-		err       error
-		startTime sql.NullInt64
+		err           error
+		origStartTime sql.NullInt64
 	)
 	dbArgs := make([]interface{}, 2, 3)
-	dbArgs[0], dbArgs[1] = collectionId, completeTime
+	dbArgs[0] = collectionId
 	sqlTag := "update-complete"
-	if completeTime == 0 {
+	if startTime != 0 {
 		sqlTag = "update-publish"
+		dbArgs[1] = startTime
 		dbArgs = append(dbArgs, scheduleId)
+	} else {
+		dbArgs[1] = completeTime
 	}
 	res := dbMeta.prepped[sqlTag].QueryRow(dbArgs...)
-	if err = res.Scan(&scheduleId, &startTime); err != nil {
+	if err = res.Scan(&scheduleId, &origStartTime); err != nil {
 		log.Panic(err)
 	}
-	return scheduleId, startTime.Int64
+	return scheduleId, origStartTime.Int64
 }
 
 func main() {
@@ -254,21 +269,21 @@ func main() {
 	}
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
 	//	dbMeta.prepped = make(map[string]*sql.Stmt)
-	dbMeta.prepped["load"], err = db.Prepare("SELECT schedule_id, collection_id, schedule_time, encryption_key, complete_time FROM schedule WHERE complete_time IS NULL OR complete_time=0 ORDER BY schedule_time")
+	dbMeta.prepped["load"], err = db.Prepare("SELECT schedule_id, collection_id, schedule_time, encryption_key, start_time, complete_time FROM schedule WHERE start_time IS NULL OR complete_time IS NULL ORDER BY schedule_time")
 	if err != nil {
-		log.Panicf("Error: Could not prepate %q statement on database: %s", "load", err.Error())
+		log.Panicf("Error: Could not prepare %q statement on database: %s", "load", err.Error())
 	}
-	dbMeta.prepped["store"], err = db.Prepare("INSERT INTO schedule (collection_id, schedule_time, encryption_key, complete_time) VALUES ($1, $2, $3, NULL) RETURNING schedule_id")
+	dbMeta.prepped["store"], err = db.Prepare("INSERT INTO schedule (collection_id, schedule_time, encryption_key, start_time, complete_time) VALUES ($1, $2, $3, NULL, NULL) RETURNING schedule_id")
 	if err != nil {
-		log.Panicf("Error: Could not prepate %q statement on database: %s", "store", err.Error())
+		log.Panicf("Error: Could not prepare %q statement on database: %s", "store", err.Error())
 	}
-	dbMeta.prepped["update-complete"], err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND complete_time=0 RETURNING schedule_id, schedule_time")
+	dbMeta.prepped["update-complete"], err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND start_time IS NOT NULL AND complete_time IS NULL RETURNING schedule_id, start_time")
 	if err != nil {
-		log.Panicf("Error: Could not prepate %q statement on database: %s", "update-complete", err.Error())
+		log.Panicf("Error: Could not prepare %q statement on database: %s", "update-complete", err.Error())
 	}
-	dbMeta.prepped["update-publish"], err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL RETURNING schedule_id, schedule_time")
+	dbMeta.prepped["update-publish"], err = db.Prepare("UPDATE schedule SET start_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL RETURNING schedule_id, start_time")
 	if err != nil {
-		log.Panicf("Error: Could not prepate %q statement on database: %s", "update-publish", err.Error())
+		log.Panicf("Error: Could not prepare %q statement on database: %s", "update-publish", err.Error())
 	}
 
 	schedule := make([]scheduleJob, 0, 10)
