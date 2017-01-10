@@ -107,7 +107,6 @@ func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot
 		if files, err = findCollectionFiles(zebedeeRoot, message.CollectionId); err != nil {
 			log.Panic(err)
 		}
-		//log.Printf("coll %q found %d files", message.CollectionId, len(files))
 		newJob.files = make([]string, len(files))
 		copy(newJob.files, files)
 
@@ -245,6 +244,14 @@ func updateJobAsComplete(dbMeta dbMetaObj, collectionId string, completeTime int
 	return scheduleId, startTime.Int64
 }
 
+func (dbMeta dbMetaObj) prep(tag, sql string) {
+	var err error
+	dbMeta.prepped[tag], err = dbMeta.db.Prepare(sql)
+	if err != nil {
+		log.Panicf("Error: Could not prepare %q statement on database: %s", "load", err.Error())
+	}
+}
+
 func main() {
 	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
 	if fileinfo, err := os.Stat(zebedeeRoot); err != nil || fileinfo.IsDir() == false {
@@ -265,23 +272,10 @@ func main() {
 		log.Panicf("Error: Could not establish a connection with the database: %s", err.Error())
 	}
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
-	//	dbMeta.prepped = make(map[string]*sql.Stmt)
-	dbMeta.prepped["load"], err = db.Prepare("SELECT schedule_id, collection_id, schedule_time, encryption_key, start_time, complete_time FROM schedule WHERE start_time IS NULL OR complete_time IS NULL ORDER BY schedule_time")
-	if err != nil {
-		log.Panicf("Error: Could not prepare %q statement on database: %s", "load", err.Error())
-	}
-	dbMeta.prepped["store"], err = db.Prepare("INSERT INTO schedule (collection_id, schedule_time, encryption_key, start_time, complete_time) VALUES ($1, $2, $3, NULL, NULL) RETURNING schedule_id")
-	if err != nil {
-		log.Panicf("Error: Could not prepare %q statement on database: %s", "store", err.Error())
-	}
-	dbMeta.prepped["update-complete"], err = db.Prepare("UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND start_time IS NOT NULL AND complete_time IS NULL RETURNING schedule_id, start_time")
-	if err != nil {
-		log.Panicf("Error: Could not prepare %q statement on database: %s", "update-complete", err.Error())
-	}
-	dbMeta.prepped["update-publish"], err = db.Prepare("UPDATE schedule SET start_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL")
-	if err != nil {
-		log.Panicf("Error: Could not prepare %q statement on database: %s", "update-publish", err.Error())
-	}
+	dbMeta.prep("load", "SELECT schedule_id, collection_id, schedule_time, encryption_key, start_time, complete_time FROM schedule WHERE start_time IS NULL OR complete_time IS NULL ORDER BY schedule_time")
+	dbMeta.prep("store", "INSERT INTO schedule (collection_id, schedule_time, encryption_key, start_time, complete_time) VALUES ($1, $2, $3, NULL, NULL) RETURNING schedule_id")
+	dbMeta.prep("update-complete", "UPDATE schedule SET complete_time=$2 WHERE collection_id=$1 AND start_time IS NOT NULL AND complete_time IS NULL RETURNING schedule_id, start_time")
+	dbMeta.prep("update-publish", "UPDATE schedule SET start_time=$2 WHERE schedule_id=$3 AND collection_id=$1 AND complete_time IS NULL")
 
 	schedule := make([]scheduleJob, 0, 10)
 
