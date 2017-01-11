@@ -33,7 +33,7 @@ func decrypt(block cipher.Block, ciphertext []byte) []byte {
 	// The IV will be the first 16 bytes within the cipher text.
 	iv := ciphertext[:block.BlockSize()]
 	stream := cipher.NewCTR(block, iv)
-	plaintext := make([]byte, len(ciphertext))
+	plaintext := make([]byte, len(ciphertext)-block.BlockSize())
 	stream.XORKeyStream(plaintext, ciphertext[block.BlockSize():])
 	return plaintext
 }
