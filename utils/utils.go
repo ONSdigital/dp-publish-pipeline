@@ -2,13 +2,14 @@ package utils
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 )
 
 type Page struct {
-	Uri  string `json:"uri"`  // Uri of the page
-	Type string `json:"type"` // Type of page timeseries, chart, ...
+	Uri  string `json:"uri"`
+	Type string `json:"type"`
 }
 
 func GetEnvironmentVariable(name string, defaultValue string) string {
@@ -32,12 +33,18 @@ func SetXLSContentHeader(w http.ResponseWriter) {
 
 func GetUri(data []byte) string {
 	var page Page
-	json.Unmarshal(data, &page)
+	err := json.Unmarshal(data, &page)
+	if err != nil {
+		log.Printf("Error unmarshalling json to Page : %s", err.Error())
+	}
 	return page.Uri
 }
 
 func GetType(data []byte) string {
 	var page Page
-	json.Unmarshal(data, &page)
+	err := json.Unmarshal(data, &page)
+	if err != nil {
+		log.Printf("Error unmarshalling json to Page : %s", err.Error())
+	}
 	return page.Type
 }

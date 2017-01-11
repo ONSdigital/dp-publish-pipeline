@@ -22,7 +22,7 @@ func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
 		log.Printf("Json message missing fields: %s", string(jsonMessage))
 		return
 	}
-	if strings.Contains(message.FileLocation, "data.json") {
+	if strings.HasSuffix(message.FileLocation, ".json") {
 		file := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(file, message.EncryptionKey)
 		if decryptErr != nil {
