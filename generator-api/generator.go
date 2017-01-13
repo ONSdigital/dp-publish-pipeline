@@ -85,7 +85,7 @@ func loadPageData(uri string) ([]byte, error) {
 }
 
 func main() {
-	port := utils.GetEnvironmentVariable("PORT", "8081")
+	port := utils.GetEnvironmentVariable("PORT", "8092")
 	http.HandleFunc("/generator", downloadFile)
 	http.ListenAndServe(":"+port, nil)
 }

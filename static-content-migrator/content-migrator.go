@@ -24,11 +24,11 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, produ
 	}
 	if !strings.HasSuffix(message.FileLocation, ".json") {
 		log.Printf("Collection %q - start", message.CollectionId)
-		s3Client := s3.CreateS3Client()
+		s3Client := s3.CreateClient(bucketName)
 		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
 		if decryptErr == nil {
-			s3.AddFileToS3(s3Client, bucketName, string(content), message.FileLocation)
+			s3Client.AddObject(string(content), message.FileLocation)
 			s3Location := "s3://" + bucketName + message.FileLocation
 			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: s3Location})
 			producer.Output <- fileComplete
@@ -45,7 +45,8 @@ func main() {
 	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
 	regionName := utils.GetEnvironmentVariable("S3_REGION", "eu-west-1")
 	log.Printf("Starting Static Content Migrator from %q from %q to %q", zebedeeRoot, consumeTopic, produceTopic)
-	s3.SetupBucket(s3.CreateS3Client(), bucketName, regionName)
+	client := s3.CreateClient(bucketName)
+	client.CreateBucket(regionName)
 	consumer := kafka.NewConsumerGroup(consumeTopic, "content-migrator")
 	producer := kafka.NewProducer(produceTopic)
 	for {
