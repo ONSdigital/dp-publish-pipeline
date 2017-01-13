@@ -2,7 +2,6 @@ package kafka
 
 import (
 	"log"
-	"os"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/Shopify/sarama"
@@ -21,7 +20,7 @@ func NewProducer(topic string) Producer {
 	}
 	outputChannel := make(chan []byte)
 	closerChannel := make(chan bool)
-	signals := make(chan os.Signal, 1)
+	//signals := make(chan os.Signal, 1)
 	//signal.Notify(signals, os.Interrupt)
 	go func() {
 		defer producer.Close()
@@ -33,9 +32,9 @@ func NewProducer(topic string) Producer {
 			case <-closerChannel:
 				log.Printf("Closing kafka producer of topic %q", topic)
 				return
-			case <-signals:
-				log.Printf("Quitting kafka producer of topic %q", topic)
-				return
+				//case <-signals:
+				//log.Printf("Quitting kafka producer of topic %q", topic)
+				//return
 			}
 		}
 	}()
