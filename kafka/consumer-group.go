@@ -52,7 +52,7 @@ func NewConsumerGroup(topic string, group string) ConsumerGroup {
 
 	go func() {
 		defer consumer.Close()
-		log.Printf("Started kafka consumer of topic %q", topic)
+		log.Printf("Started kafka consumer of topic %q group %q", topic, group)
 		for {
 			select {
 			case err := <-consumer.Errors():
@@ -63,14 +63,14 @@ func NewConsumerGroup(topic string, group string) ConsumerGroup {
 				case msg := <-consumer.Messages():
 					messageChannel <- Message{msg, consumer}
 				case n := <-consumer.Notifications():
-					log.Printf("Rebalancing - partitions : %+v", n.Current[topic])
+					log.Printf("Rebalancing %q group %q - partitions %+v", topic, group, n.Current[topic])
 				case <-time.After(tick):
 					consumer.CommitOffsets()
 				case <-signals:
-					log.Printf("Quitting kafka consumer of topic %q", topic)
+					log.Printf("Quitting kafka consumer of topic %q group %q", topic, group)
 					return
 				case <-closerChannel:
-					log.Printf("Closing kafka consumer of topic %q", topic)
+					log.Printf("Closing kafka consumer of topic %q group %q", topic, group)
 					return
 				}
 			}
