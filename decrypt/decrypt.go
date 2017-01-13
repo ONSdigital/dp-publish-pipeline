@@ -1,11 +1,13 @@
 package decrypt
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
-	"io/ioutil"
+	"io"
 	"log"
+	"os"
 )
 
 func DecryptFile(path string, key string) ([]byte, error) {
@@ -15,9 +17,9 @@ func DecryptFile(path string, key string) ([]byte, error) {
 		return nil, err
 	}
 
-	data, err := ioutil.ReadFile(path)
+	inFile, err := os.Open(path)
 	if err != nil {
-		log.Println("Failed to load file at", path, err.Error())
+		log.Println("Failed to open file at", path, err.Error())
 		return nil, err
 	}
 
@@ -26,14 +28,23 @@ func DecryptFile(path string, key string) ([]byte, error) {
 		log.Println("Failed to create cipher with the key provided", err.Error())
 		return nil, err
 	}
-	return decrypt(block, data), nil
+	return decrypt(block, inFile), nil
 }
 
-func decrypt(block cipher.Block, ciphertext []byte) []byte {
-	// The IV will be the first 16 bytes within the cipher text.
-	iv := ciphertext[:block.BlockSize()]
+func decrypt(block cipher.Block, inFile *os.File) []byte {
+	// The IV will be the first BlockSize bytes of inFile
+	iv := make([]byte, block.BlockSize())
+	if _, err := io.ReadFull(inFile, iv); err != nil {
+		panic(err)
+	}
 	stream := cipher.NewCTR(block, iv)
-	plaintext := make([]byte, len(ciphertext)-block.BlockSize())
-	stream.XORKeyStream(plaintext, ciphertext[block.BlockSize():])
-	return plaintext
+	reader := &cipher.StreamReader{S: stream, R: inFile}
+
+	plaintextBuf := bytes.NewBuffer(nil)
+	_, err := io.Copy(plaintextBuf, reader)
+	if err != nil {
+		panic(err)
+	}
+
+	return plaintextBuf.Bytes()
 }
