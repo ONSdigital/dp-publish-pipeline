@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/ONSdigital/dp-publish-pipeline/utils"
-	"github.com/bsm/sarama-cluster"
-	"gopkg.in/olivere/elastic.v3"
 	"log"
 	"os"
 	"os/signal"
+
+	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/bsm/sarama-cluster"
+	"gopkg.in/olivere/elastic.v3"
 )
 
 type FileCompleteEvent struct {
@@ -17,20 +18,20 @@ type FileCompleteEvent struct {
 }
 
 type Page struct {
-	URI         string
-	Type        string
-	Description *PageDescription
+	URI         string           `json:"uri"`
+	Type        string           `json:"type"`
+	Description *PageDescription `json:"description"`
 }
 
 type PageDescription struct {
-	Title           string
-	Summary         string
-	MetaDescription string
-	Keywords        []string
-	Unit            string
-	PreUnit         string
-	Source          string
-	ReleaseDate     string
+	Title           string   `json:"title"`
+	Summary         string   `json:"summary"`
+	MetaDescription string   `json:"metaDescription"`
+	Keywords        []string `json:"keywords"`
+	Unit            string   `json:"unit"`
+	PreUnit         string   `json:"preUnit"`
+	Source          string   `json:"source"`
+	ReleaseDate     string   `json:"releaseDate"`
 }
 
 func main() {
@@ -72,7 +73,6 @@ func main() {
 	for {
 		select {
 		case msg := <-kafkaConsumer.Messages():
-			log.Printf("message received: %+v\n", msg)
 			processMessage(msg.Value, searchClient, elasticSearchIndex)
 		case <-signals:
 			log.Print("Shutting down...")
@@ -90,11 +90,11 @@ func processMessage(msg []byte, elasticSearchClient *elastic.Client, elasticSear
 	var event FileCompleteEvent
 	err := json.Unmarshal(msg, &event)
 	if err != nil {
-		log.Printf("Failed to parse json event data: %s", msg)
+		log.Printf("Failed to parse json event data")
 		return
 	}
 	if event.FileContent == "" {
-		log.Printf("Ignoring %v in collection, it has no JSON content.", event.FileLocation, event.CollectionId)
+		log.Printf("Ignoring %s in collection, it has no JSON content.", event.FileLocation)
 		return
 	}
 
@@ -102,7 +102,7 @@ func processMessage(msg []byte, elasticSearchClient *elastic.Client, elasticSear
 	var page Page
 	err = json.Unmarshal([]byte(event.FileContent), &page)
 	if err != nil {
-		log.Printf("Failed to parse json page data: %s", msg)
+		log.Printf("Failed to parse json page data: %+v", event)
 		return
 	}
 

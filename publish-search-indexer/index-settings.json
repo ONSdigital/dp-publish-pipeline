@@ -1,0 +1,190 @@
+{
+    "analysis": {
+        "analyzer": {
+            "default_index": {
+                "filter": [
+                    "trim",
+                    "lowercase"
+                ],
+                "tokenizer": "keyword"
+            },
+            "first_letter": {
+                "filter": [
+                    "lowercase",
+                    "first_letter"
+                ],
+                "tokenizer": "keyword"
+            },
+            "ons_standard": {
+                "filter": [
+                    "lowercase",
+                    "standard",
+                    "stop"
+                ],
+                "tokenizer": "standard"
+            },
+            "ons_stem": {
+                "filter": [
+                    "lowercase",
+                    "standard",
+                    "stop",
+                    "stem_exclusion",
+                    "snowball"
+                ],
+                "tokenizer": "standard"
+            },
+            "ons_stem_clear_dates": {
+                "char_filter": "clear_dates",
+                "filter": [
+                    "lowercase",
+                    "standard",
+                    "stop",
+                    "stem_exclusion",
+                    "snowball"
+                ],
+                "tokenizer": "standard"
+            },
+            "ons_synonym": {
+                "filter": [
+                    "lowercase",
+                    "ons_synonyms",
+                    "standard",
+                    "stop"
+                ],
+                "tokenizer": "standard"
+            },
+            "ons_synonym_stem": {
+                "filter": [
+                    "lowercase",
+                    "ons_synonyms",
+                    "standard",
+                    "stop",
+                    "stem_exclusion",
+                    "snowball"
+                ],
+                "tokenizer": "standard"
+            },
+            "ons_synonym_stem_clear_dates": {
+                "char_filter": "clear_dates",
+                "filter": [
+                    "lowercase",
+                    "ons_synonyms",
+                    "standard",
+                    "stop",
+                    "stem_exclusion",
+                    "snowball"
+                ],
+                "tokenizer": "standard"
+            }
+        },
+        "char_filter": {
+            "clear_dates": {
+                "pattern": "([1|2]\\d{3})|((?i)january|february|march|april|may|june|july|august|september|october|november|december)",
+                "type": "pattern_replace"
+            }
+        },
+        "filter": {
+            "first_letter": {
+                "pattern": "^[^a-zA-Z]*(.).*",
+                "replacement": "$1",
+                "type": "pattern_replace"
+            },
+            "ons_synonyms": {
+                "synonyms": [
+                    "cpi, consumer price inflation, consumer price index",
+                    "rpi,  retail price index",
+                    "gdp,  gross domestic product",
+                    "ashe,  annual survey of hours and earnings",
+                    "gva,  gross value added",
+                    "awe,  average weekly earnings",
+                    "lsoa,  lower layer super output area",
+                    "ppi,  producer price inflation, producer price index",
+                    "sic,  standard industrial classification",
+                    "ukea,  uk economic accounts",
+                    "neet,  young people not in education",
+                    "neet,  employment or training",
+                    "fdi,  foreign direct investment",
+                    "bop,  balance of payments",
+                    "sme,  small medium enterprises",
+                    "bres,  business register and employment survey",
+                    "gdhi,  gross disposable household income",
+                    "hpi,  house price index",
+                    "idbr,  inter departmental business register",
+                    "uk,  united kingdom",
+                    "copd,  chronic obstructive pulmonary disease",
+                    "lfs,  labour force survey",
+                    "imd,  index of multiple deprivation",
+                    "ccg,  clinical commissioning group",
+                    "abs,  annual business survey",
+                    "sppi,  services producer price indices",
+                    "hiv,  human immunodeficiency virus",
+                    "ips,  international passenger survey",
+                    "msoa,  middle layer super output areas",
+                    "aei,  average earnings index",
+                    "soc,  standard occupational classification",
+                    "jsa,  jobseekers allowance",
+                    "vat,  value added tax",
+                    "hmrc,  hm revenue and customs published",
+                    "ltim,  long term international migration",
+                    "ns sec,  national statistics socio economic classification",
+                    "nssec,  national statistics socio economic classification",
+                    "topsi,  turnover and orders in production and services industries",
+                    "r&d,  research and development",
+                    "berd,  business enterprise research and development",
+                    "iop,  uk index of production",
+                    "ios,  index of services",
+                    "rsi,  retail sales index",
+                    "ict,  information and communication technology",
+                    "gfcf,  gross fixed capital formation",
+                    "esa,  european system of accounts",
+                    "aps,  annual population survey",
+                    "eu,  european union",
+                    "m&a, mergers and acquisitions",
+                    "itis, international trade in services",
+                    "imr, infant mortality rate",
+                    "tfr, total fertility rate",
+                    "evo, estimates of the very old",
+                    "asdr, age specific death rate",
+                    "asmr, age standardised mortality rate or ratio",
+                    "etb, etbhi, effects of taxes & benefits on household income",
+                    "lcf, lcfs, living costs & food survey",
+                    "eu-silc, eusilc, silc, eu-statistics on income & living condition",
+                    "esspros, european system of social protections statistics",
+                    "sdg, sustainable development goals",
+                    "sdi, sustainable development indicators",
+                    "pwb, personal well-being",
+                    "ghg, greenhouse gas emissions",
+                    "wfj, workforce jobs",
+                    "was, wealth and assets survey",
+                    "oa, output area",
+                    "wz, workplace zone",
+                    "npp, national population projections",
+                    "snpp, subnational population projections",
+                    "suid, sudden unexpected/unexplained infant deaths",
+                    "drd, drug related deaths",
+                    "c diff, clostridium difficile",
+                    "eolc, end of life care",
+                    "mb1, cancer registrations",
+                    "imd, index of multiple deprivation",
+                    "utla, upper tier local authority",
+                    "sep, socioeconomic position",
+                    "hi, health inequality",
+                    "wellbeing => well being",
+                    "psf => public sector finance"
+                ],
+                "type": "synonym"
+            },
+            "stem_exclusion": {
+                "keywords": [
+                    "productivity",
+                    "production"
+                ],
+                "type": "keyword_marker"
+            }
+        }
+    },
+    "index": {
+        "number_of_replicas": 0,
+        "number_of_shards": 3
+    }
+}
