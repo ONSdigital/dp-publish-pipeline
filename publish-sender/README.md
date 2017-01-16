@@ -11,3 +11,8 @@ Decrypts metadata and pushes the data off to a publish receiver
 #### Running a test environment
 * Install kafka server ```brew install kafka```
 * Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```
+
+#### Typical config change
+To increase the message size for the _complete-file_ topic:
+
+`kafka-configs --zookeeper $ZOOKEEPER --entity-type topics --entity-name uk.gov.ons.dp.web.complete-file --alter --add-config max.message.bytes=10000000`

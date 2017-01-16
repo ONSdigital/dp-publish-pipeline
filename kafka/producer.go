@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"log"
+	"strconv"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/Shopify/sarama"
@@ -14,7 +15,13 @@ type Producer struct {
 }
 
 func NewProducer(topic string) Producer {
-	producer, err := sarama.NewAsyncProducer([]string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}, nil)
+	envMax, err := strconv.ParseInt(utils.GetEnvironmentVariable("KAFKA_MAX_BYTES", "2000000"), 10, 32)
+	if err != nil {
+		panic("Bad value for KAFKA_MAX_BYTES")
+	}
+	config := sarama.NewConfig()
+	config.Producer.MaxMessageBytes = int(envMax)
+	producer, err := sarama.NewAsyncProducer([]string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}, config)
 	if err != nil {
 		panic(err)
 	}
@@ -27,8 +34,15 @@ func NewProducer(topic string) Producer {
 		log.Printf("Started kafka producer of topic %q", topic)
 		for {
 			select {
+			case err := <-producer.Errors():
+				log.Panicf("Producer[outer] %q: %s", topic, err)
 			case message := <-outputChannel:
-				producer.Input() <- &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(message)}
+
+				select {
+				case err := <-producer.Errors():
+					log.Panicf("Producer[inner] %q: %s", topic, err)
+				case producer.Input() <- &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(message)}:
+				}
 			case <-closerChannel:
 				log.Printf("Closing kafka producer of topic %q", topic)
 				return
