@@ -33,7 +33,7 @@ test:
 producer:
 	kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.schedule
 $(SERVICES):
-	src=publish-$@; dir=$$src; if [ $@ = migrator ]; then src=content-$@; dir=static-$$src; fi; \
+	@src=publish-$@; dir=$$src; if [ $@ = migrator ]; then src=content-$@; dir=static-$$src; fi; \
 	cd $$dir && go run $$src.go
 
 # target AWS:                   make package GOOS=linux GOARCH=amd64
