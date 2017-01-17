@@ -94,7 +94,7 @@ func timeSeriesToWriter(writer fileWriter, timeSeries TimeSeries, filter DataFil
 	writer([]string{"Important Notes", ""})
 
 	switch filter.Frequency {
-	case "year":
+	case "years":
 		if filter.FromYear != "" && filter.ToYear != "" {
 			filterOnYears(writer, timeSeries, filter)
 		} else {
@@ -102,7 +102,7 @@ func timeSeriesToWriter(writer fileWriter, timeSeries TimeSeries, filter DataFil
 				writer([]string{data.Date, data.Value})
 			}
 		}
-	case "quarter":
+	case "quarters":
 		if filter.FromQuarter != "" && filter.ToQuarter != "" {
 			filterOnQuarter(writer, timeSeries, filter)
 		} else {
@@ -110,7 +110,7 @@ func timeSeriesToWriter(writer fileWriter, timeSeries TimeSeries, filter DataFil
 				writer([]string{data.Date, data.Value})
 			}
 		}
-	case "month":
+	case "months", "":
 		if filter.FromMonth != "" && filter.ToMonth != "" {
 			filterOnMonth(writer, timeSeries, filter)
 		} else {

@@ -22,7 +22,7 @@ func TestTimeseriesCsvYear(t *testing.T) {
 		Convey("with a url and param, test timeseries to csv with year filter", t, func() {
 			url := "/timeseries"
 			AddTestData(url, loadTimeseries(timeseriesData))
-			param := "?uri=" + url + "&frequency=year&format=csv&fromYear=1988&toYear=2000"
+			param := "?uri=" + url + "&frequency=years&format=csv&fromYear=1988&toYear=2000"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
 			downloadFile(w, r)
@@ -45,7 +45,7 @@ func TestTimeseriesCsvQuarter(t *testing.T) {
 		Convey("with a url and param, test timeseries to csv with quarter filter", t, func() {
 			url := "/timeseries"
 			AddTestData(url, loadTimeseries(timeseriesData))
-			param := "?uri=" + url + "&frequency=quarter&format=csv&fromYear=1988&toYear=2000&fromQuarter=q3&toQuarter=q2"
+			param := "?uri=" + url + "&frequency=quarters&format=csv&fromYear=1988&toYear=2000&fromQuarter=q3&toQuarter=q2"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
 			downloadFile(w, r)
@@ -68,7 +68,7 @@ func TestTimeseriesCsvMonth(t *testing.T) {
 		Convey("with a url and param, test timeseries to csv with month filter", t, func() {
 			url := "/timeseries"
 			AddTestData(url, loadTimeseries(timeseriesData))
-			param := "?uri=" + url + "&frequency=month&format=csv&fromYear=1988&toYear=2000&fromMonth=06&toMonth=11"
+			param := "?uri=" + url + "&frequency=months&format=csv&fromYear=1988&toYear=2000&fromMonth=06&toMonth=11"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
 			downloadFile(w, r)
@@ -131,7 +131,7 @@ func TestTimeseriesXls(t *testing.T) {
 		Convey("with a url and param, test timeseries to xls", t, func() {
 			url := "/timeseries"
 			AddTestData(url, loadTimeseries(timeseriesData))
-			param := "?uri=" + url + "&format=xls&frequency=month"
+			param := "?uri=" + url + "&format=xls&frequency=months"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
 			downloadFile(w, r)

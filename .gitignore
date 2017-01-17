@@ -5,6 +5,7 @@ publish-receiver/publish-receiver
 publish-sender/publish-sender
 content-api/content-api
 publish-search-indexer/publish-search-indexer
+generator-api/generator-api
 *.tar.gz
 build
 .idea
