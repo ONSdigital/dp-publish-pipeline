@@ -166,11 +166,12 @@ func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, dbMeta dbMe
 		sched.Lock()
 		defer sched.Unlock()
 
-		foundScheduleIdx := -1
+		foundScheduleIdx, fileCount := -1, 0
 		for i := 0; i < len(*schedule); i++ {
 			job := (*schedule)[i]
 			if job.collectionId == message.CollectionId {
 				foundScheduleIdx = i
+				fileCount = len(job.files)
 				break
 			}
 		}
@@ -180,7 +181,7 @@ func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, dbMeta dbMe
 		scheduleId, startTime := updateJobAsComplete(dbMeta, message.CollectionId, completeTime)
 		(*schedule)[foundScheduleIdx] = scheduleJob{}
 		inFlight--
-		log.Printf("Collection %q [id %d] completed in %s - in-flight: %d", message.CollectionId, scheduleId, time.Duration(completeTime-startTime)*time.Nanosecond, inFlight)
+		log.Printf("Collection %q [id %d] completed %d files in %s - in-flight: %d", message.CollectionId, scheduleId, fileCount, time.Duration(completeTime-startTime)*time.Nanosecond, inFlight)
 	}
 }
 
