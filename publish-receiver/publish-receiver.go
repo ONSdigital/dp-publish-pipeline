@@ -7,31 +7,13 @@ import (
 	"os/signal"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
+	mongo "github.com/ONSdigital/dp-publish-pipeline/mongodb"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
 
-type S3Set struct {
-	CollectionId string `bson:"collectionId"`
-	FileLocation string `bson:"fileLocation"`
-	S3Location   string `bson:"s3Location"`
-}
-
-type MetaSet struct {
-	CollectionId string `bson:"collectionId"`
-	FileLocation string `bson:"fileLocation"`
-	FileContent  string `bson:"fileContent"`
-}
-
-const DATA_BASE = "onswebsite"
-const MASTER_COLLECTION = "meta"
-const S3_COLLECTION = "s3"
-
-const MONGODB_ENV = "MONGODB"
 const FILE_COMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
 
-func storeData(jsonMessage []byte, db *mgo.Database) {
+func storeData(jsonMessage []byte, client *mongo.MongoClient) {
 	var dataSet kafka.FileCompleteMessage
 	err := json.Unmarshal(jsonMessage, &dataSet)
 	if err != nil {
@@ -43,59 +25,41 @@ func storeData(jsonMessage []byte, db *mgo.Database) {
 		return
 	}
 	if dataSet.S3Location != "" {
-		collection := db.C(S3_COLLECTION)
-		s3Set := S3Set{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
-		addS3Document(*collection, s3Set)
+		s3document := mongo.S3Document{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
+		addS3Document(client, s3document)
 	} else if dataSet.FileContent != "" {
-		collection := db.C(MASTER_COLLECTION)
-		metaSet := MetaSet{dataSet.CollectionId, dataSet.FileLocation, dataSet.FileContent}
-		addMetaDocument(*collection, metaSet)
-
+		metaDocument := mongo.MetaDocument{dataSet.CollectionId, dataSet.FileLocation, dataSet.FileContent}
+		addMetaDocument(client, metaDocument)
 	}
 }
 
-func addS3Document(collection mgo.Collection, doc S3Set) {
-	query := bson.M{"fileLocation": doc.FileLocation}
-	change := bson.M{"$set": bson.M{"s3Location": doc.S3Location, "collectionId": doc.CollectionId}}
-	updateErr := collection.Update(query, change)
-	if updateErr != nil {
-		// No document existed so this must be a new resource
-		insertError := collection.Insert(doc)
-		if insertError != nil {
-			panic(insertError)
-		}
-		log.Printf("Collection %q Inserted into %q resource %s", doc.CollectionId, collection.Name, doc.FileLocation)
-	} else {
-		log.Printf("Collection %q Updated %q with %s", doc.CollectionId, collection.Name, doc.FileLocation)
+func addS3Document(client *mongo.MongoClient, doc mongo.S3Document) {
+	err := client.AddS3Data(doc)
+	if err != nil {
+		log.Fatalf("Failed to add s3 document. S3Document %+v :", doc)
 	}
+	log.Printf("Collection %q Inserted into %q resource %s", doc.CollectionId, "S3", doc.FileLocation)
 }
 
-func addMetaDocument(collection mgo.Collection, doc MetaSet) {
-	query := bson.M{"fileLocation": doc.FileLocation}
-	change := bson.M{"$set": bson.M{"fileContent": doc.FileContent, "collectionId": doc.CollectionId}}
-	updateErr := collection.Update(query, change)
-	if updateErr != nil {
-		// No document existed so this must be a new page
-		insertError := collection.Insert(doc)
-		if insertError != nil {
-			panic(insertError)
-		}
-		log.Printf("Collection %q Inserted page into %s at %s", doc.CollectionId, collection.Name, doc.FileLocation)
-	} else {
-		log.Printf("Collection %q Updated page in %s at %s", doc.CollectionId, collection.Name, doc.FileLocation)
+func addMetaDocument(client *mongo.MongoClient, doc mongo.MetaDocument) {
+	err := client.AddPage(doc)
+	if err != nil {
+		log.Fatalf("Failed to add meta document. MetaDocument %+v :", doc)
 	}
+	log.Printf("Collection %q Inserted page into %s at %s", doc.CollectionId, "meta", doc.FileLocation)
+
 }
 
 func main() {
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
 	fileCompleteConsumer := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
 
-	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(MONGODB_ENV, "localhost"))
-	if err != nil {
-		panic(err)
+	client, connectionErr := mongo.CreateClient()
+	defer client.Close()
+	if connectionErr != nil {
+		log.Fatalf("Failed to connect to mongodb. Error : %s", connectionErr.Error())
 	}
-	defer dbSession.Close()
-	db := dbSession.DB(DATA_BASE)
+
 	log.Printf("Started publish receiver on %q", fileCompleteTopic)
 
 	signals := make(chan os.Signal, 1)
@@ -103,7 +67,7 @@ func main() {
 	for {
 		select {
 		case consumerMessage := <-fileCompleteConsumer.Incoming:
-			storeData(consumerMessage.GetData(), db)
+			storeData(consumerMessage.GetData(), &client)
 			consumerMessage.Commit()
 		case <-signals:
 			log.Printf("Service stopped")

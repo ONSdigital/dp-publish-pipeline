@@ -24,18 +24,22 @@ https://github.com/olivere/elastic
 
 ##### Elastic search install via brew
 * Install Elastic Search `brew install elasticsearch@2.4`
-* Ensure the cluser.name property is set to `cluster.name: elasticsearch`. 
+* Ensure the cluser.name property is set to `cluster.name: elasticsearch`.
 The configuration file can be found at `/usr/local/etc/elasticsearch/elasticsearch.yml`. For some reason it appended my username onto the end of the default clustername.
 * Start Elastic Search service `brew services start elasticsearch@2.4`
 * Run it `elasticsearch`
 
 ##### Elastic search via dp-compose
 The dp-compose project requires the native docker for mac (not docker toolbox)
-``` 
+```
 git clone git@github.com:ONSdigital/dp-compose.git
 cd dp-compose
 ./run.sh
 ```
+
+#### Create / Delete elastic index
+* Run ./createIndex.sh to create the elastic index
+* Run ./deleteIndex.sh to create the elastic index
 
 ##### Run the search indexer
 * Run the search indexer `make search-indexer`
