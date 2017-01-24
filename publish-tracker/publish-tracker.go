@@ -77,7 +77,7 @@ func trackInprogressRelease(jsonMessage []byte, producer kafka.Producer) {
 		return
 	}
 	if file.CollectionId == "" || file.FileLocation == "" {
-		log.Printf("Json message is mising fields : %s", string(jsonMessage))
+		log.Printf("Json message is missing fields : %s", string(jsonMessage))
 	}
 	mutex.Lock()
 	defer mutex.Unlock()
