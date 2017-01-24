@@ -35,6 +35,10 @@ Install and setup Postgresql:
  psql -U dp dp -f doc/init.sql
 ```
 
+On Ubuntu, you may have to give the ubuntu user access to this DB:
+Add the line `local   dp              dp                                      trust` to the file `/etc/postgresql/9.5/main/pg_hba.conf` and restart.
+
+
 #### Running a test environment
 
 * `make scheduler`
