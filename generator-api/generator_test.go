@@ -25,7 +25,7 @@ func TestTimeseriesCsvYear(t *testing.T) {
 			param := "?uri=" + url + "&frequency=years&format=csv&fromYear=1988&toYear=2000"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			csv := string(w.Body.Bytes())
 			So(w.Code, ShouldEqual, 200)
 			So(csv, ShouldContainSubstring, "Title,OS visits to EU:All visits Thousands-NSA")
@@ -48,7 +48,7 @@ func TestTimeseriesCsvQuarter(t *testing.T) {
 			param := "?uri=" + url + "&frequency=quarters&format=csv&fromYear=1988&toYear=2000&fromQuarter=q3&toQuarter=q2"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			csv := string(w.Body.Bytes())
 			So(w.Code, ShouldEqual, 200)
 			So(csv, ShouldContainSubstring, "Title,OS visits to EU:All visits Thousands-NSA")
@@ -71,7 +71,7 @@ func TestTimeseriesCsvMonth(t *testing.T) {
 			param := "?uri=" + url + "&frequency=months&format=csv&fromYear=1988&toYear=2000&fromMonth=06&toMonth=11"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			csv := string(w.Body.Bytes())
 			So(w.Code, ShouldEqual, 200)
 			So(csv, ShouldContainSubstring, "Title,OS visits to EU:All visits Thousands-NSA")
@@ -94,7 +94,7 @@ func TestChartCsv(t *testing.T) {
 			param := "?uri=" + url + "&format=csv"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			csv := string(w.Body.Bytes())
 			So(w.Code, ShouldEqual, 200)
 			So(csv, ShouldContainSubstring, "Figure 4: National identity, England and Wales, 2011")
@@ -115,7 +115,7 @@ func TestChartXls(t *testing.T) {
 			param := "?uri=" + url + "&format=xls"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			So(w.Code, ShouldEqual, 200)
 			// Not the best way to test the xls file
 			So(len(w.Body.Bytes()), ShouldEqual, 13824)
@@ -134,10 +134,30 @@ func TestTimeseriesXls(t *testing.T) {
 			param := "?uri=" + url + "&format=xls&frequency=months"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			So(w.Code, ShouldEqual, 200)
 			// Not the best way to test the xls file
 			So(len(w.Body.Bytes()), ShouldEqual, 38400)
+		})
+	} else {
+		t.Skip("No mongodb connection available")
+	}
+}
+
+func TestTimeseriesExport(t *testing.T) {
+	t.Parallel()
+	if isMongodbAvailable() {
+		Convey("with a url and param, test timeseries to csv with year filter", t, func() {
+			url := "/timeseries,/timeseries"
+			AddTestData(url, loadTimeseries(timeseriesData))
+			param := "?uri=" + url + "&format=csv"
+			r, _ := http.NewRequest("GET", localAddress+param, nil)
+			w := httptest.NewRecorder()
+			exportFiles(w, r)
+			csv := string(w.Body.Bytes())
+			So(w.Code, ShouldEqual, 200)
+			So(csv, ShouldContainSubstring, "Title,OS visits to EU:All visits Thousands-NSA")
+			So(len(csv), ShouldEqual, 12174)
 		})
 	} else {
 		t.Skip("No mongodb connection available")
@@ -152,7 +172,7 @@ func TestUriNotFound(t *testing.T) {
 			param := "?uri=" + url + "&format=xls&frequency=month"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			So(w.Code, ShouldEqual, 404)
 		})
 	} else {
@@ -166,7 +186,7 @@ func TestNoParameters(t *testing.T) {
 		Convey("with a no parameters, 400 code is returned", t, func() {
 			r, _ := http.NewRequest("GET", localAddress, nil)
 			w := httptest.NewRecorder()
-			downloadFile(w, r)
+			generateFile(w, r)
 			So(w.Code, ShouldEqual, 400)
 		})
 	} else {

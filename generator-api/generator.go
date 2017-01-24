@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"gopkg.in/mgo.v2"
@@ -20,7 +21,7 @@ const mongodbHost = "MONGODB"
 const xlsFormat = "xls"
 const csvFormat = "csv"
 
-func downloadFile(w http.ResponseWriter, r *http.Request) {
+func generateFile(w http.ResponseWriter, r *http.Request) {
 	format, uri, err := findParams(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -28,6 +29,35 @@ func downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := findFilterParams(r)
 	log.Printf("Got format : %s, uri: %s", format, uri)
+	data, err := loadPageData(uri)
+	if err != nil {
+		http.Error(w, "Content not found", http.StatusNotFound)
+		return
+	}
+	pageType := utils.GetType(data)
+	log.Printf("page Type : %s", pageType)
+	if pageType == "timeseries" {
+		generateTimeseries(data, filter, format, w)
+	} else if pageType == "chart" {
+		generateChart(data, format, w)
+	} else {
+		http.Error(w, "Unsupported type", http.StatusBadRequest)
+	}
+}
+
+func exportFiles(w http.ResponseWriter, r *http.Request) {
+	format, uri, _ := findParams(r)
+	uriList := strings.Split(uri, ",")
+	filter := findFilterParams(r)
+	if format == csvFormat {
+		for _, item := range uriList {
+			log.Printf(" uri : %s", item)
+			copydata(item, format, filter, w)
+		}
+	}
+}
+
+func copydata(uri string, format string, filter DataFilter, w http.ResponseWriter) {
 	data, err := loadPageData(uri)
 	if err != nil {
 		http.Error(w, "Content not found", http.StatusNotFound)
@@ -86,6 +116,7 @@ func loadPageData(uri string) ([]byte, error) {
 
 func main() {
 	port := utils.GetEnvironmentVariable("PORT", "8092")
-	http.HandleFunc("/generator", downloadFile)
+	http.HandleFunc("/generator", generateFile)
+	http.HandleFunc("/export", exportFiles)
 	http.ListenAndServe(":"+port, nil)
 }
