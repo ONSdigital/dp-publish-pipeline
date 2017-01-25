@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	mongo "github.com/ONSdigital/dp-publish-pipeline/mongodb"
@@ -42,12 +43,34 @@ func addS3Document(client *mongo.MongoClient, doc mongo.S3Document) {
 }
 
 func addMetaDocument(client *mongo.MongoClient, doc mongo.MetaDocument) {
+	doc.FileLocation = resloveURI(doc.FileLocation)
 	err := client.AddPage(doc)
 	if err != nil {
 		log.Fatalf("Failed to add meta document. MetaDocument %+v :", doc)
 	}
 	log.Printf("Collection %q Inserted page into %s at %s", doc.CollectionId, "meta", doc.FileLocation)
+}
 
+// Within the zebedee reader it builds the uri based of what it is given. Instead
+// of repeating this per HTTP request, mongo stores the URI the website expects
+// So the content-api does not need to build the uri each time.
+// Examples :
+//  File location                : URI
+//  data.json                    => / (Special case for root file)
+//  about/data.json              => /about
+//  timeseries/mmg/hhh/data.json => /timeseries/mmg/hhh
+//  trade/report/938438.json     => /trade/report/938438 (Special case for charts)
+func resloveURI(uri string) string {
+	if strings.Contains(uri, "data.json") {
+		if uri == "data.json" {
+			return "/"
+		}
+		webURI := "/" + uri[:len(uri)-10]
+		return webURI
+	} else if strings.Contains(uri, ".json") {
+		return "/" + uri[:len(uri)-5]
+	}
+	return uri
 }
 
 func main() {
