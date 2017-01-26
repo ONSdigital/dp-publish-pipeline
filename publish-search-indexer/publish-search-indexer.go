@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/bsm/sarama-cluster"
@@ -59,6 +60,14 @@ func main() {
 	}
 	log.Print("Elastic Search client Created successfully.")
 
+	bulk, _ := searchClient.BulkProcessor().
+		BulkSize(1000).
+		Workers(4).
+		FlushInterval(time.Millisecond * 1000).
+		After(after).
+		Do()
+
+	bulk.Start()
 	log.Printf("Creating Kafka consumer.")
 	consumerConfig := cluster.NewConfig()
 	kafkaConsumer, err := cluster.NewConsumer(kafkaBrokers, kafkaConsumerGroup, []string{kafkaConsumerTopic}, consumerConfig)
@@ -73,9 +82,10 @@ func main() {
 	for {
 		select {
 		case msg := <-kafkaConsumer.Messages():
-			processMessage(msg.Value, searchClient, elasticSearchIndex)
+			processMessage(msg.Value, bulk, elasticSearchIndex)
 		case <-signals:
 			log.Print("Shutting down...")
+			bulk.Stop()
 			kafkaConsumer.Close()
 			searchClient.Stop()
 			log.Printf("Service stopped")
@@ -84,7 +94,16 @@ func main() {
 	}
 }
 
-func processMessage(msg []byte, elasticSearchClient *elastic.Client, elasticSearchIndex string) {
+func after(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+	if err != nil {
+		log.Printf("Failed to bulk upload documents : %s", err.Error())
+		log.Printf("Number of documents failed : %d", len(response.Failed()))
+	} else {
+		log.Printf("Uploaded %d documents to the ONS index.", len(response.Succeeded()))
+	}
+}
+
+func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elasticSearchIndex string) {
 
 	// First deserialise the event to check that its a json file to index.
 	var event FileCompleteEvent
@@ -101,20 +120,20 @@ func processMessage(msg []byte, elasticSearchClient *elastic.Client, elasticSear
 	// If the message has JSON content, deserialise it as a page.
 	var page Page
 	err = json.Unmarshal([]byte(event.FileContent), &page)
-	if err != nil {
+	// If the page type is nothing it triggers error in elastic search and causes the pipe line
+	// to slow down.
+	if err != nil || page.Type == "" {
 		log.Printf("Failed to parse json page data: %+v", event)
 		return
 	}
 
-	log.Printf("Updating search index for uri:%v", page.URI)
-	log.Printf("%+v", page)
-	_, err = elasticSearchClient.Index().
+	r := elastic.NewBulkIndexRequest().
 		Index(elasticSearchIndex).
 		Type(page.Type).
 		Id(page.URI).
-		BodyJson(page).
-		Refresh(true).
-		Do()
+		Doc(page)
+
+	elasticSearchClient.Add(r)
 	if err != nil {
 		log.Print(err)
 	}
