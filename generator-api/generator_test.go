@@ -151,7 +151,10 @@ func TestTimeseriesExport(t *testing.T) {
 			url := "/timeseries,/timeseries"
 			AddTestData(url, loadTimeseries(timeseriesData))
 			param := "?uri=" + url + "&format=csv"
-			r, _ := http.NewRequest("GET", localAddress+param, nil)
+			r, _ := http.NewRequest("POST", localAddress+param, nil)
+			r.ParseForm()
+			r.PostForm["uri"] = []string{"/timeseries", "/timeseries"}
+			r.PostForm["format"] = []string{"csv"}
 			w := httptest.NewRecorder()
 			exportFiles(w, r)
 			csv := string(w.Body.Bytes())
