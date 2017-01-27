@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -33,6 +34,7 @@ type PageDescription struct {
 	PreUnit         string   `json:"preUnit"`
 	Source          string   `json:"source"`
 	ReleaseDate     string   `json:"releaseDate"`
+	LatestRelease   bool     `json:"latestRelease"`
 }
 
 func main() {
@@ -100,6 +102,11 @@ func after(executionId int64, requests []elastic.BulkableRequest, response *elas
 		log.Printf("Number of documents failed : %d", len(response.Failed()))
 	} else {
 		log.Printf("Uploaded %d documents to the ONS index.", len(response.Succeeded()))
+		if response.Errors {
+			for _, failedDocument := range response.Failed() {
+				log.Printf("Error on type %s, reason : %s", failedDocument.Type, failedDocument.Error.Reason)
+			}
+		}
 	}
 }
 
@@ -113,7 +120,6 @@ func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elas
 		return
 	}
 	if event.FileContent == "" {
-		log.Printf("Ignoring %s in collection, it has no JSON content.", event.FileLocation)
 		return
 	}
 
@@ -125,6 +131,11 @@ func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elas
 	if err != nil || page.Type == "" {
 		log.Printf("Failed to parse json page data: %+v", event)
 		return
+	}
+
+	isLatest := !strings.Contains(event.FileLocation, "previous")
+	if page.Description != nil {
+		page.Description.LatestRelease = isLatest
 	}
 
 	r := elastic.NewBulkIndexRequest().
