@@ -1,5 +1,6 @@
 #!/bin/bash
-
-curl -XDELETE 'http://localhost:9200/ons'
-# Add a new line so the json message stands out more
-echo ""
+elasticUri='http://localhost:9200'
+echo "Deleting ONS index"
+curl -w "\n" -XDELETE $elasticUri'/ons'
+echo "Deleting Departments index"
+curl -w "\n" -XDELETE $elasticUri'/departments'
