@@ -1,6 +1,8 @@
 package mongo
 
 import (
+	"log"
+
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -26,15 +28,19 @@ func (c *MongoClient) Close() {
 	c.session.Close()
 }
 
-func (c *MongoClient) FindPage(uri string) (MetaDocument, error) {
+func (c *MongoClient) FindPage(uri string, lang string) (MetaDocument, error) {
 	var document MetaDocument
-	notFoundErr := c.db.C(metaCollection).Find(bson.M{"fileLocation": uri}).One(&document)
+	if lang == "" {
+		lang = "en"
+	}
+	log.Printf("lang : %s", lang)
+	notFoundErr := c.db.C(metaCollection).Find(bson.M{"fileLocation": uri, "language": lang}).One(&document)
 	return document, notFoundErr
 }
 
 func (c *MongoClient) AddPage(document MetaDocument) error {
 	collection := c.db.C(metaCollection)
-	query := bson.M{"fileLocation": document.FileLocation}
+	query := bson.M{"fileLocation": document.FileLocation, "language": document.Language}
 	change := bson.M{"$set": bson.M{"fileContent": document.FileContent, "collectionId": document.CollectionId}}
 	updateErr := collection.Update(query, change)
 	if updateErr != nil {
