@@ -11,7 +11,7 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 )
 
-func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
+func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer kafka.Producer) {
 	var message kafka.PublishFileMessage
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
@@ -29,8 +29,11 @@ func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
 			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, file)
 			return
 		}
+
 		data, _ := json.Marshal(kafka.FileCompleteMessage{FileLocation: message.FileLocation, FileContent: string(content), CollectionId: message.CollectionId})
-		producer.Output <- data
+		fileProducer.Output <- data
+		data, _ = json.Marshal(kafka.FileCompleteMessage{FileLocation: message.FileLocation, CollectionId: message.CollectionId})
+		flagProducer.Output <- data
 		log.Printf("Collection %q - uri %s", message.CollectionId, message.FileLocation)
 	}
 }
@@ -38,14 +41,17 @@ func sendData(zebedeeRoot string, jsonMessage []byte, producer kafka.Producer) {
 func main() {
 	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
 	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.publish-file")
-	produceTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
-	log.Printf("Starting publish sender from %q to %q", consumeTopic, produceTopic)
+	completeFileTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
+	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
+
+	log.Printf("Starting publish sender from %q to %q, %q", consumeTopic, completeFileTopic, completeFileFlagTopic)
 	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-sender")
-	producer := kafka.NewProducer(produceTopic)
+	fileProducer := kafka.NewProducer(completeFileTopic)
+	flagProducer := kafka.NewProducer(completeFileFlagTopic)
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
-			sendData(zebedeeRoot, consumerMessage.GetData(), producer)
+			sendData(zebedeeRoot, consumerMessage.GetData(), fileProducer, flagProducer)
 			consumerMessage.Commit()
 		}
 	}
