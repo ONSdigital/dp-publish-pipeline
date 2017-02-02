@@ -33,6 +33,12 @@ type FileCompleteMessage struct {
 	FileContent  string
 }
 
+// S3Location and FileContent are mutually exclusive
+type FileCompleteFlagMessage struct {
+	CollectionId string
+	FileLocation string
+}
+
 type CollectionCompleteMessage struct {
 	CollectionId string
 }

@@ -15,7 +15,7 @@ type Tracker struct {
 	Files        []string
 }
 
-func (t *Tracker) Update(file kafka.FileCompleteMessage) bool {
+func (t *Tracker) Update(file kafka.FileCompleteFlagMessage) bool {
 	t.Files = append(t.Files, file.FileLocation)
 	log.Printf("Collection %q - Progress %d/%d - %s", t.CollectionId, len(t.Files), t.Total, file.FileLocation)
 	return t.IsFinished()
@@ -71,7 +71,7 @@ func trackNewRelease(jsonMessage []byte, producer kafka.Producer) {
 }
 
 func trackInprogressRelease(jsonMessage []byte, producer kafka.Producer) {
-	var file kafka.FileCompleteMessage
+	var file kafka.FileCompleteFlagMessage
 	if err := json.Unmarshal(jsonMessage, &file); err != nil {
 		log.Printf("Failed to parse json message")
 		return
@@ -99,7 +99,7 @@ func trackInprogressRelease(jsonMessage []byte, producer kafka.Producer) {
 
 func main() {
 	publishCountTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
-	completeFileTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_TOPIC", "uk.gov.ons.dp.web.complete-file")
+	completeFileTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	completeCollectionTopic := utils.GetEnvironmentVariable("COMPLETE_TOPIC", "uk.gov.ons.dp.web.complete")
 	log.Printf("Starting publish tracker of %q and %q to %q", completeFileTopic, publishCountTopic, completeCollectionTopic)
 
