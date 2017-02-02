@@ -14,14 +14,21 @@ const s3Collection = "s3"
 
 const mongodbHost = "MONGODB"
 
+var rmFileContent, rmS3Location bson.M
+
 type MongoClient struct {
 	session *mgo.Session
 	db      *mgo.Database
+	metaC   *mgo.Collection
+	S3C     *mgo.Collection
 }
 
 func CreateClient() (MongoClient, error) {
 	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
-	return MongoClient{dbSession, dbSession.DB(dataBase)}, err
+	//dbSession.SetMode(0, true)  // 0 == Eventual consistency mode
+	rmFileContent = bson.M{"fileContent": 1}
+	rmS3Location = bson.M{"s3Location": 1}
+	return MongoClient{dbSession, dbSession.DB(dataBase), dbSession.DB(dataBase).C(metaCollection), dbSession.DB(dataBase).C(s3Collection)}, err
 }
 
 func (c *MongoClient) Close() {
@@ -34,32 +41,40 @@ func (c *MongoClient) FindPage(uri string, lang string) (MetaDocument, error) {
 		lang = "en"
 	}
 	log.Printf("lang : %s", lang)
-	notFoundErr := c.db.C(metaCollection).Find(bson.M{"fileLocation": uri, "language": lang}).One(&document)
+	notFoundErr := c.metaC.Find(bson.M{"fileLocation": uri, "language": lang}).One(&document)
 	return document, notFoundErr
 }
 
 func (c *MongoClient) AddPage(document MetaDocument) error {
-	collection := c.db.C(metaCollection)
 	query := bson.M{"fileLocation": document.FileLocation, "language": document.Language}
-	change := bson.M{"$set": bson.M{"fileContent": document.FileContent, "collectionId": document.CollectionId}}
-	updateErr := collection.Update(query, change)
-	if updateErr != nil {
-		// No document existed so this must be a new page
-		insertError := collection.Insert(document)
-		return insertError
+	setter := bson.M{"fileContent": document.FileContent, "collectionId": document.CollectionId}
+	updateRes, err := c.metaC.Upsert(query, bson.M{"$set": setter, "$unset": rmS3Location})
+	if err != nil {
+		log.Panicf("Failed to upsert meta %s", err.Error())
 	}
-	return nil
+	if updateRes.Updated != 1 && updateRes.Matched != 1 {
+		log.Printf("meta update %v", updateRes)
+	}
+	return err
 }
 
 func (c *MongoClient) AddS3Data(document S3Document) error {
-	collection := c.db.C(s3Collection)
 	query := bson.M{"fileLocation": document.FileLocation}
-	change := bson.M{"$set": bson.M{"s3Location": document.S3Location, "collectionId": document.CollectionId}}
-	updateErr := collection.Update(query, change)
-	if updateErr != nil {
-		// No document existed so this must be a new page
-		insertError := collection.Insert(document)
-		return insertError
+	setter := bson.M{"s3Location": document.S3Location, "collectionId": document.CollectionId}
+	change := bson.M{"$set": setter, "$unset": rmFileContent}
+	updateRes, err := c.S3C.Upsert(query, change)
+	if err != nil {
+		log.Panicf("Failed to upsert s3 %s", err.Error())
 	}
-	return nil
+	if updateRes.Updated != 1 && updateRes.Matched != 1 {
+		log.Printf("s3 update %v", updateRes)
+	}
+	return err
+}
+
+func QueueS3Data(b *mgo.Bulk, document S3Document) {
+	query := bson.M{"fileLocation": document.FileLocation}
+	setter := bson.M{"s3Location": document.S3Location, "collectionId": document.CollectionId}
+	change := bson.M{"$set": setter, "$unset": rmFileContent}
+	b.Upsert(query, change)
 }
