@@ -23,7 +23,7 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, compl
 		return
 	}
 	if !strings.HasSuffix(message.FileLocation, ".json") {
-		log.Printf("Collection %q - start %q", message.CollectionId, message.FileLocation)
+		// log.Printf("Collection %q - start %q", message.CollectionId, message.FileLocation)
 		s3Client := s3.CreateClient(bucketName)
 		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
