@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"gopkg.in/mgo.v2"
@@ -46,14 +45,20 @@ func generateFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func exportFiles(w http.ResponseWriter, r *http.Request) {
-	format, uri, _ := findParams(r)
-	uriList := strings.Split(uri, ",")
+	r.ParseForm()
+	log.Printf("Exporting timeseries %+v as %s", r.PostForm["uri"], r.PostFormValue("format"))
+	format := r.PostFormValue("format")
+	uriList := r.PostForm["uri"]
+	log.Printf("Export request! format :  %s", format)
 	filter := findFilterParams(r)
+	for _, item := range uriList {
+		copydata(item, format, filter, w)
+	}
+
 	if format == csvFormat {
-		for _, item := range uriList {
-			log.Printf(" uri : %s", item)
-			copydata(item, format, filter, w)
-		}
+		utils.SetCSVContentHeader(w)
+	} else {
+		utils.SetXLSContentHeader(w)
 	}
 }
 

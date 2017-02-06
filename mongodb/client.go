@@ -35,14 +35,18 @@ func (c *MongoClient) Close() {
 	c.session.Close()
 }
 
-func (c *MongoClient) FindPage(uri string) (MetaDocument, error) {
+func (c *MongoClient) FindPage(uri string, lang string) (MetaDocument, error) {
 	var document MetaDocument
-	notFoundErr := c.metaC.Find(bson.M{"fileLocation": uri}).One(&document)
+	if lang == "" {
+		lang = "en"
+	}
+	log.Printf("lang : %s", lang)
+	notFoundErr := c.metaC.Find(bson.M{"fileLocation": uri, "language": lang}).One(&document)
 	return document, notFoundErr
 }
 
 func (c *MongoClient) AddPage(document MetaDocument) error {
-	query := bson.M{"fileLocation": document.FileLocation}
+	query := bson.M{"fileLocation": document.FileLocation, "language": document.Language}
 	setter := bson.M{"fileContent": document.FileContent, "collectionId": document.CollectionId}
 	updateRes, err := c.metaC.Upsert(query, bson.M{"$set": setter, "$unset": rmS3Location})
 	if err != nil {

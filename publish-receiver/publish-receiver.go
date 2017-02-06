@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
@@ -29,7 +30,9 @@ func storeData(jsonMessage []byte, client *mongo.MongoClient) {
 		s3document := mongo.S3Document{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
 		addS3Document(client, s3document)
 	} else if dataSet.FileContent != "" {
-		metaDocument := mongo.MetaDocument{dataSet.CollectionId, dataSet.FileLocation, dataSet.FileContent}
+		lang := getLanguage(dataSet.FileLocation)
+		metaDocument := mongo.MetaDocument{dataSet.CollectionId, lang,
+			resloveURI(dataSet.FileLocation), dataSet.FileContent}
 		addMetaDocument(client, metaDocument)
 	}
 }
@@ -43,12 +46,18 @@ func addS3Document(client *mongo.MongoClient, doc mongo.S3Document) {
 }
 
 func addMetaDocument(client *mongo.MongoClient, doc mongo.MetaDocument) {
-	doc.FileLocation = resloveURI(doc.FileLocation)
 	err := client.AddPage(doc)
 	if err != nil {
 		log.Fatalf("Failed to add meta document. MetaDocument %+v :", doc)
 	}
 	log.Printf("Collection %q Inserted page into %s at %s", doc.CollectionId, "meta", doc.FileLocation)
+}
+
+func getLanguage(uri string) string {
+	if strings.Contains(uri, "data_cy.json") {
+		return "cy"
+	}
+	return "en"
 }
 
 // Within the zebedee reader it builds the uri based of what it is given. Instead
@@ -61,11 +70,11 @@ func addMetaDocument(client *mongo.MongoClient, doc mongo.MetaDocument) {
 //  timeseries/mmg/hhh/data.json => /timeseries/mmg/hhh
 //  trade/report/938438.json     => /trade/report/938438 (Special case for charts)
 func resloveURI(uri string) string {
-	if strings.Contains(uri, "data.json") {
+	if strings.Contains(uri, "data.json") || strings.Contains(uri, "data_cy.json") {
 		if uri == "data.json" {
 			return "/"
 		}
-		webURI := "/" + uri[:len(uri)-10]
+		webURI := "/" + filepath.Dir(uri)
 		return webURI
 	} else if strings.Contains(uri, ".json") {
 		return "/" + uri[:len(uri)-5]

@@ -2,6 +2,7 @@ package mongo
 
 type MetaDocument struct {
 	CollectionId string `json:"collectionId" bson:"collectionId"`
+	Language     string `json:"fileContent" bson:"language"`
 	FileLocation string `json:"fileLocation" bson:"fileLocation"`
 	FileContent  string `json:"fileContent" bson:"fileContent"`
 }
