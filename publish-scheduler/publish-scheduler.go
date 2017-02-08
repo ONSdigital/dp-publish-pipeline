@@ -88,7 +88,7 @@ func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot
 		if err != nil {
 			log.Panicf("Collection %q Cannot numeric convert: %q", message.CollectionId, message.ScheduleTime)
 		}
-		scheduleTime *= 1000000000 // convert from epoch (seconds) to epoch-nanoseconds (UnixNano)
+		scheduleTime *= 1000 * 1000 * 1000 // convert from epoch (seconds) to epoch-nanoseconds (UnixNano)
 		newJob := scheduleJob{collectionId: message.CollectionId, scheduleTime: scheduleTime, encryptionKey: message.EncryptionKey}
 
 		addIndex := -1
