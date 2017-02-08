@@ -1,4 +1,4 @@
-SERVICES?=receiver scheduler sender tracker migrator search-indexer
+SERVICES?=receiver scheduler sender migrator search-indexer
 UTILS?=decrypt kafka s3 utils
 
 export GOOS?=$(shell go env GOOS)
