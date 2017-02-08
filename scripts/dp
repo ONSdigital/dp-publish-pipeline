@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+
+usage() {
+	cat <<EOF
+	$0 <args...>
+		--up		- start all the processes (default) (see --svc)
+		--ps		- list all running processes
+		--kill		- kill all running processes
+		--restart	- do these: --kill --ps --rotate --up --tail (see --svc)
+		--svc "a b:N c"	- list of services (--{up,restart}) (N = opt no. of procs)
+				  (currently: $SERVICES)
+
+		--tail		- tail all logfiles
+		--rotate	- rotate all logfiles
+		--time [ext]	- show logs of main (first,last) events [logs with .ext]
+
+		--seed collID	- show the JS message to schedule collID
+		-p		- run the kafka producer (paste the above into this)
+
+		--resize	- change the message size for kafka
+		--groups	- show the kafka
+
+		--db		- show the DB table kschedule'
+		--db-wipe	- clear the DB table 'schedule'
+		--db-count	- show the count of rows in 'schedule', and docs in mongo
+		--db-index	- ensure mongo indexes exist and show them
+EOF
+	[[ -n $1 ]] && exit $1
+}
+
+os=$(uname -s)
+if [[ $os == Darwin ]]; then # it's a dev mac
+    export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-./test-data}
+    def_svc_num=3
+    export MONGODB=${MONGODB:-localhost:27017}
+    start_kafka=
+    PATH=$PATH:$PWD/build/darwin-amd64
+else # aws
+    export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-$HOME/test-data}
+    def_svc_num=20
+    # the below line assumes you update the IP with: sudo vi /etc/hosts
+    export MONGODB=${MONGODB:-mongo:27017}
+    # add kafka commands to PATH
+    PATH=$PATH:/opt/kafka_2.10-0.10.1.0/bin
+    start_kafka=1
+fi
+export zebedee_root=$ZEBEDEE_ROOT KAFKA_MAX_BYTES=${KAFKA_MAX_BYTES:-10000000} MONGODB_DB=${MONGODB_DB:-onswebsite}
+export ZOOKEEPER=${ZOOKEEPER:-localhost:2181} KAFKA_ADDR=${KAFKA_ADDR:-localhost:9092}
+
+LOG_DIR=~/log
+sched_topic=uk.gov.ons.dp.web.schedule sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
+SERVICES=${SERVICES:-publish-sender:$def_svc_num static-content-migrator:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
+
+log()  { echo -e '\e[36m'$(date '+%Y-%m-%d %H:%M:%S')'\e[0m' "$@"; }
+warn() { log "$@" >&2; }
+die()  { warn "$@"; exit 2; }
+sql()      { echo "$@" > $tmp_file.sql || die Cannot write to $tmp_file.sql; psql -U dp dp -f $tmp_file.sql;      rm -f $tmp_file.sql; }
+mongo_js() {  mongo $MONGODB/$MONGODB_DB --quiet --eval "$@"; }
+# mongo_js() { echo "$@" > $tmp_file.js  || die Cannot write to $tmp_file.js;  mongo $MONGODB/$MONGODB_DB --quiet $tmp_file.js; rm -f $tmp_file.js; }
+ensure_kafka() { ps -ef | grep -q ' java .* [k]afka' && return; warn No kafka - starting...; sudo -i -u kafka ~kafka/bin/start-kafka; }
+# ensure_mongo() { sudo docker ps| grep -q 'mongo' && return;     warn No mongo - starting...; sudo docker start $MONGODB_DB; }
+kick_off() { local n=$1 cmd=$2 l=${2%.sh}; shift 2; l=${l##*-}; for (( i=0; i<n; i++ )); do e=; if (( i > 0 )); then e=$i; fi
+		nohup $cmd >> $LOG_DIR/$l$e.log 2>&1 &
+done; }
+
+[[ -n $start_kafka ]] && ensure_kafka
+# ensure_mongo
+mkdir -p $LOG_DIR || exit 3
+
+[[ -z $1 ]] && set -- --up
+res=0
+
+while [[ -n $1 ]]; do
+	arg=$1; shift
+	if   [[ $arg == -h || $arg == --help ]]; then usage; break
+	elif [[ $arg == --svc     ]]; then SERVICES=$1; shift
+	elif [[ $arg == --kill    ]]; then
+		killable=
+		for s in $SERVICES; do
+			s=${s%:*}
+			s=${s#static-}
+			if [[ $os == Darwin ]]; then
+				log Killing... $s
+				killall $s
+			else
+				killable=$killable${killable:+|}$s
+			fi
+		done
+		if [[ $os != Darwin ]]; then
+			log Killing... $killable
+			killall -r "^($killable)\$"
+		fi
+	elif [[ $arg == --ps      ]]; then log Processes:; ps -ef | egrep --color '\.[0-9]+ \b([p]ublish-|[c]ontent-)'; res=$?
+	elif [[ $arg == --tail    ]]; then log Tailing...; tail -f $LOG_DIR/*.log
+	elif [[ $arg == --time    ]]; then
+					ext=.log; if [[ -n $1 ]]; then ext=.log.$1; shift; fi
+					cd $LOG_DIR || exit 2
+					(
+						grep 'start:' scheduler$ext				|sort -n |tail -2
+						grep 'completed' scheduler$ext				|sort -n |tail -2
+						grep 'ERROR' scheduler$ext				|sort -n |tail -2
+						test -f tracker.log && grep Completed tracker$ext	|sort -n |tail -1
+						tail -qn 1 sender*$ext					|sort -n |tail -1
+						tail -qn 1 migrator*$ext				|sort -n |tail -1
+						tail -qn 20 receiver*$ext |grep Inserted		|sort -n |tail -1
+					)|sort -n
+	elif [[ $arg == --restart ]]; then set -- --kill --ps --rotate --up --tail "$@"
+	elif [[ $arg == --rotate  ]]; then date=$(date '+%Y%m%d-%H%M%S'); log Logs get extension .$date; for i in $LOG_DIR/*.log; do mv $i $i.$date; done
+	elif [[ $arg == --seed    ]]; then
+		coll=$1; shift; [[ -n $coll ]] || usage 1
+		key=$(awk '$1=="'"$coll"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $coll
+		echo '{"CollectionID":"'"$coll"'","EncryptionKey":"'"$key"'","ScheduleTime":"0"}'
+	elif [[ $arg == -m ]]; then
+		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
+	elif [[ $arg == -c ]]; then log Starting consumer...; kafka-console-consumer.sh --bootstrap-server $KAFKA_ADDR --topic $sched_topic
+	elif [[ $arg == -p ]]; then log Starting producer...; kafka-console-producer.sh --broker-list $KAFKA_ADDR --topic $sched_topic
+	elif [[ $arg == --resize ]]; then
+		kafka-configs.sh --zookeeper $ZOOKEEPER --entity-type topics --entity-name uk.gov.ons.dp.web.complete-file --alter --add-config max.message.bytes=$KAFKA_MAX_BYTES
+	elif [[ $arg == --groups ]]; then
+		for i in $(kafka-consumer-groups.sh --bootstrap-server $KAFKA_ADDR --list);do kafka-consumer-groups.sh --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe;done
+	elif [[ $arg == --reset ]]; then
+		log "Starting all-consuming consumer of $sched_group group for $sched_topic (Ctrl-C to quit)..."
+		kafka-verifiable-consumer.sh --broker-list $KAFKA_ADDR --topic $sched_topic --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
+	elif [[ $arg == --db       ]]; then sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
+	elif [[ $arg == --db-wipe  ]]; then sql "delete from schedule"; mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
+	elif [[ $arg == --db-count ]]; then
+		sql_count=$(psql -U dp dp -t -c "select count(*) from schedule");         [[ -z $sql_count    ]] && die Could not count DB
+		mongo_counts=$(mongo_js "print(db.s3.count() + ' ' + db.meta.count());"); [[ -z $mongo_counts ]] && die Bad mongo count
+		log SQL: $sql_count s3: ${mongo_counts/ / meta: } total: $(( ${mongo_counts/ /+} ))
+	elif [[ $arg == --db-index ]]; then
+		mongo_js 'print(JSON.stringify(db.s3.createIndex({fileLocation:1}), null, 8),JSON.stringify(db.meta.createIndex({fileLocation:1,language:1}), null, 8))'
+		# colls_js='var colls=["s3","meta"];' for_colls_js="$colls_js"'for(len=colls.length, i=0; i<len; i++)'
+		# mongo_js "$for_colls_js"'{print(JSON.stringify(db[colls[i]].getIndexes(), null, 8))}'
+		mongo_js 'print(JSON.stringify(db.s3.getIndexes(), null, 8),JSON.stringify(db.meta.getIndexes(), null, 8))'
+	elif [[ $arg == --up ]]; then
+		log Starting all services...
+		for s in $SERVICES; do
+			num=1
+			if [[ ${s##*:} != $s ]]; then
+				num=${s##*:}
+				s=${s%:*}
+			fi
+			sh=~/bin/run-$s.sh
+			s=${s#static-}
+			if [[ -x $sh ]]; then
+				kick_off $num $sh
+			else
+				kick_off $num $s
+			fi
+		done
+	else
+		usage >&2
+		die Bad arg: $arg
+	fi
+done
+
+exit $res
+# vim: tabstop=8 softtabstop=0 noexpandtab smarttab smartindent
