@@ -36,6 +36,7 @@ type scheduleJob struct {
 	encryptionKey string
 	scheduleTime  int64
 	files         []string
+	filesToDo     int
 	isInFlight    bool
 }
 
@@ -63,18 +64,18 @@ func publishCollection(job scheduleJob, fileProducerChannel, totalProducerChanne
 	var data []byte
 	var err error
 
-	if data, err = json.Marshal(kafka.PublishTotalMessage{job.collectionId, len(job.files)}); err != nil {
+	if data, err = json.Marshal(kafka.PublishTotalMessage{job.collectionId, job.filesToDo}); err != nil {
 		log.Panic(err)
 	}
 	totalProducerChannel <- data
 
-	for i := 0; i < len(job.files); i++ {
+	for i := 0; i < job.filesToDo; i++ {
 		if data, err = json.Marshal(kafka.PublishFileMessage{job.collectionId, job.encryptionKey, job.files[i]}); err != nil {
 			log.Panic(err)
 		}
 		fileProducerChannel <- data
 	}
-	log.Printf("Collection %q [id %d] sent %d files", job.collectionId, job.scheduleId, len(job.files))
+	log.Printf("Collection %q [id %d] sent %d files", job.collectionId, job.scheduleId, job.filesToDo)
 }
 
 func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot string, dbMeta dbMetaObj) {
@@ -107,7 +108,8 @@ func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot
 		if files, err = findCollectionFiles(zebedeeRoot, message.CollectionId); err != nil {
 			log.Panic(err)
 		}
-		newJob.files = make([]string, len(files))
+		newJob.filesToDo = len(files)
+		newJob.files = make([]string, newJob.filesToDo)
 		copy(newJob.files, files)
 
 		newJob.scheduleId = storeJob(dbMeta, newJob)
@@ -118,7 +120,7 @@ func scheduleCollection(jsonMessage []byte, schedule *[]scheduleJob, zebedeeRoot
 		} else {
 			(*schedule)[addIndex] = newJob
 		}
-		log.Printf("Collection %q [id %d] schedule new idx %d now len:%d files:%d", newJob.collectionId, newJob.scheduleId, addIndex, len(*schedule), len(newJob.files))
+		log.Printf("Collection %q [id %d] schedule new idx %d now len:%d files:%d", newJob.collectionId, newJob.scheduleId, addIndex, len(*schedule), newJob.filesToDo)
 	}
 }
 
@@ -154,39 +156,22 @@ func checkSchedule(schedule *[]scheduleJob, publishChannel chan scheduleJob, dbM
 	}
 }
 
-func completeCollection(jsonMessage []byte, schedule *[]scheduleJob, dbMeta dbMetaObj) {
-	var message kafka.CollectionCompleteMessage
-	if err := json.Unmarshal(jsonMessage, &message); err != nil {
-		log.Panicf("Failed to parse json: %v", jsonMessage)
-	} else if len(message.CollectionId) == 0 {
-		log.Panicf("Empty collectionId: %v", jsonMessage)
-	} else {
-		completeTime := time.Now().UnixNano()
-
-		sched.Lock()
-		defer sched.Unlock()
-
-		foundScheduleIdx, fileCount := -1, 0
-		for i := 0; i < len(*schedule); i++ {
-			job := (*schedule)[i]
-			if job.collectionId == message.CollectionId {
-				foundScheduleIdx = i
-				fileCount = len(job.files)
-				break
-			}
-		}
-		if foundScheduleIdx == -1 {
-			log.Panicf("Failed to find completed job %q in schedule", message.CollectionId)
-		}
-		scheduleId, startTime := updateJobAsComplete(dbMeta, message.CollectionId, completeTime)
-		(*schedule)[foundScheduleIdx] = scheduleJob{}
-		inFlight--
-		log.Printf("Collection %q [id %d] completed %d files in %s - in-flight: %d", message.CollectionId, scheduleId, fileCount, time.Duration(completeTime-startTime)*time.Nanosecond, inFlight)
-	}
+func completeCollectionIndex(sIdx int, schedule *[]scheduleJob, dbMeta dbMetaObj) {
+	// ASSERT: sched.Lock() is in place - by caller
+	completeTime := time.Now().UnixNano()
+	job := (*schedule)[sIdx]
+	fileCount := len(job.files)
+	scheduleId, startTime := updateJobAsComplete(dbMeta, job.collectionId, completeTime)
+	(*schedule)[sIdx] = scheduleJob{}
+	inFlight--
+	log.Printf("Collection %q [id %d] completed %d files in %s - in-flight: %d", job.collectionId, scheduleId, fileCount, time.Duration(completeTime-startTime)*time.Nanosecond, inFlight)
 }
 
 func loadSchedule(dbMeta dbMetaObj, schedule *[]scheduleJob, zebedeeRoot string) {
 	rows, err := dbMeta.prepped["load"].Query()
+	if err != nil {
+		log.Panic(err)
+	}
 	defer rows.Close()
 
 	for rows.Next() {
@@ -200,12 +185,11 @@ func loadSchedule(dbMeta dbMetaObj, schedule *[]scheduleJob, zebedeeRoot string)
 			log.Fatal(err)
 		}
 
-		job := scheduleJob{scheduleId: scheduleId, scheduleTime: scheduleTime.Int64, collectionId: collectionId.String, encryptionKey: encryptionKey.String}
 		var files []string
-		if files, err = findCollectionFiles(zebedeeRoot, job.collectionId); err != nil {
+		if files, err = findCollectionFiles(zebedeeRoot, collectionId.String); err != nil {
 			log.Panic(err)
 		}
-		//log.Printf("coll %q found %d files", message.CollectionId, len(files))
+		job := scheduleJob{scheduleId: scheduleId, scheduleTime: scheduleTime.Int64, collectionId: collectionId.String, encryptionKey: encryptionKey.String, filesToDo: len(files)}
 		job.files = make([]string, len(files))
 		copy(job.files, files)
 
@@ -245,6 +229,38 @@ func updateJobAsComplete(dbMeta dbMetaObj, collectionId string, completeTime int
 	return scheduleId, startTime.Int64
 }
 
+func updateJobFileComplete(jsonMessage []byte, schedule *[]scheduleJob, dbMeta dbMetaObj) {
+	var file kafka.FileCompleteFlagMessage
+	if err := json.Unmarshal(jsonMessage, &file); err != nil {
+		log.Printf("Failed to parse json message")
+		return
+	}
+	if file.CollectionId == "" || file.FileLocation == "" {
+		log.Printf("Json message is missing fields : %s", string(jsonMessage))
+		return
+	}
+
+	sched.Lock()
+	defer sched.Unlock()
+
+	jobFound := false
+	for i := 0; i < len(*schedule); i++ {
+		if (*schedule)[i].collectionId == file.CollectionId {
+			(*schedule)[i].filesToDo--
+			if (*schedule)[i].filesToDo == 0 {
+				completeCollectionIndex(i, schedule, dbMeta)
+			} else if (*schedule)[i].filesToDo%250 == 0 {
+				log.Printf("Collection %q has %d files to do", file.CollectionId, (*schedule)[i].filesToDo)
+			}
+			jobFound = true
+			break
+		}
+	}
+	if !jobFound {
+		log.Printf("ERROR: Failed to find job %q in schedule for file %q", file.CollectionId, file.FileLocation)
+	}
+}
+
 func (dbMeta dbMetaObj) prep(tag, sql string) {
 	var err error
 	dbMeta.prepped[tag], err = dbMeta.db.Prepare(sql)
@@ -262,7 +278,7 @@ func main() {
 	scheduleTopic := utils.GetEnvironmentVariable("SCHEDULE_TOPIC", "uk.gov.ons.dp.web.schedule")
 	produceFileTopic := utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	produceTotalTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
-	completeCollectionTopic := utils.GetEnvironmentVariable("COMPLETE_TOPIC", "uk.gov.ons.dp.web.complete")
+	completeFileTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 
 	db, err := sql.Open("postgres", dbSource)
@@ -287,27 +303,26 @@ func main() {
 	totalProducer := kafka.NewProducer(produceTotalTopic)
 	scheduleConsumer := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
 	fileProducer := kafka.NewProducer(produceFileTopic)
-	completeConsumer := kafka.NewConsumer(completeCollectionTopic)
+	fileConsumer := kafka.NewConsumerGroup(completeFileTopic, "publish-scheduler")
 
 	publishChannel := make(chan scheduleJob)
-	exitChannel := make(chan bool)
 
-	go func() {
-		for {
-			select {
-			case scheduleMessage := <-scheduleConsumer.Incoming:
+	for {
+		select {
+		case scheduleMessage := <-scheduleConsumer.Incoming:
+			go func() {
 				scheduleCollection(scheduleMessage.GetData(), &schedule, zebedeeRoot, dbMeta)
 				scheduleMessage.Commit()
-			case publishMessage := <-publishChannel:
-				go publishCollection(publishMessage, fileProducer.Output, totalProducer.Output)
-			case completeMessage := <-completeConsumer.Incoming:
-				go completeCollection(completeMessage, &schedule, dbMeta)
-			case <-time.After(tick):
-				go checkSchedule(&schedule, publishChannel, dbMeta)
-			}
+			}()
+		case publishMessage := <-publishChannel:
+			go publishCollection(publishMessage, fileProducer.Output, totalProducer.Output)
+		case fileCompleteMessage := <-fileConsumer.Incoming:
+			go func() {
+				updateJobFileComplete(fileCompleteMessage.GetData(), &schedule, dbMeta)
+				fileCompleteMessage.Commit()
+			}()
+		case <-time.After(tick):
+			go checkSchedule(&schedule, publishChannel, dbMeta)
 		}
-	}()
-	<-exitChannel
-
-	log.Printf("Service publish scheduler stopped")
+	}
 }
