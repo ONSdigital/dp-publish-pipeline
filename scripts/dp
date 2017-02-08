@@ -53,7 +53,7 @@ export ZOOKEEPER=${ZOOKEEPER:-localhost:2181} KAFKA_ADDR=${KAFKA_ADDR:-localhost
 
 LOG_DIR=~/log
 sched_topic=uk.gov.ons.dp.web.schedule sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
-SERVICES=${SERVICES:-publish-sender:$def_svc_num static-content-migrator:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
+SERVICES=${SERVICES:-publish-sender:$def_svc_num static-content-migrator:$def_svc_num publish-receiver:$def_svc_num publish-scheduler}
 
 log()  { echo -e '\e[36m'$(date '+%Y-%m-%d %H:%M:%S')'\e[0m' "$@"; }
 warn() { log "$@" >&2; }
