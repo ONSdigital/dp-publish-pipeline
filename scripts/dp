@@ -14,8 +14,10 @@ usage() {
 		--rotate	- rotate all logfiles
 		--time [ext]	- show logs of main (first,last) events [logs with .ext]
 
-		--seed collID	- show the JS message to schedule collID
-		-p		- run the kafka producer (paste the above into this)
+		--seed collID [collIDend] [:sec_offset]
+				- show the JS messages to schedule collID[..collID2]
+					start now (default) or next minute+sec_offset
+		-p		- run the kafka producer (e.g. dp --seed test0001|dp -p)
 
 		--resize	- change the message size for kafka
 		--groups	- show the kafka
@@ -35,6 +37,7 @@ if [[ $os == Darwin ]]; then # it's a dev mac
     export MONGODB=${MONGODB:-localhost:27017}
     start_kafka=
     PATH=$PATH:$PWD/build/darwin-amd64
+    k_ext=
 else # aws
     export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-$HOME/test-data}
     def_svc_num=20
@@ -43,6 +46,7 @@ else # aws
     # add kafka commands to PATH
     PATH=$PATH:/opt/kafka_2.10-0.10.1.0/bin
     start_kafka=1
+    k_ext=.sh
 fi
 export zebedee_root=$ZEBEDEE_ROOT KAFKA_MAX_BYTES=${KAFKA_MAX_BYTES:-10000000} MONGODB_DB=${MONGODB_DB:-onswebsite}
 export ZOOKEEPER=${ZOOKEEPER:-localhost:2181} KAFKA_ADDR=${KAFKA_ADDR:-localhost:9092}
@@ -107,20 +111,39 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --restart ]]; then set -- --kill --ps --rotate --up --tail "$@"
 	elif [[ $arg == --rotate  ]]; then date=$(date '+%Y%m%d-%H%M%S'); log Logs get extension .$date; for i in $LOG_DIR/*.log; do mv $i $i.$date; done
 	elif [[ $arg == --seed    ]]; then
-		coll=$1; shift; [[ -n $coll ]] || usage 1
-		key=$(awk '$1=="'"$coll"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $coll
-		echo '{"CollectionID":"'"$coll"'","EncryptionKey":"'"$key"'","ScheduleTime":"0"}'
+		when=0 coll= end_coll=
+		while [[ -n $1 ]]; do
+			if [[ -z $coll ]]; then
+				coll=$1
+				end_coll=$coll
+			elif [[ $1 =~ :[0-9]+ ]]; then
+				when=$(date -v+1M -v${1#:}S '+%s')  # get time for next minute and $1 secs
+			elif [[ -d $ZEBEDEE_ROOT/collections/$1/complete ]]; then
+				end_coll=$1
+			else
+				break
+			fi
+			shift
+		done
+		[[ -z $coll ]] && usage 1 >&2
+		shopt -s extglob # for the regexes in the for() (remove leading zeroes otherwise bash thinks it is octal)
+		for (( c=${coll##test*(0)}; c <= ${end_coll##test*(0)}; c++ )); do
+			len=${#c} col=${coll:0:-len}$c       # get prefix of $coll removing length of $c (i.e. coll=test0009,c=10 so len=2 col=test0010)
+			# echo c=$c len=$len col=$col
+			key=$(awk '$1=="'"$col"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $col
+			echo '{"CollectionID":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'"}'
+		done
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
-	elif [[ $arg == -c ]]; then log Starting consumer...; kafka-console-consumer.sh --bootstrap-server $KAFKA_ADDR --topic $sched_topic
-	elif [[ $arg == -p ]]; then log Starting producer...; kafka-console-producer.sh --broker-list $KAFKA_ADDR --topic $sched_topic
+	elif [[ $arg == -c ]]; then log Starting consumer...; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $sched_topic
+	elif [[ $arg == -p ]]; then log Starting producer...; kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $sched_topic
 	elif [[ $arg == --resize ]]; then
-		kafka-configs.sh --zookeeper $ZOOKEEPER --entity-type topics --entity-name uk.gov.ons.dp.web.complete-file --alter --add-config max.message.bytes=$KAFKA_MAX_BYTES
+		kafka-configs$k_ext --zookeeper $ZOOKEEPER --entity-type topics --entity-name uk.gov.ons.dp.web.complete-file --alter --add-config max.message.bytes=$KAFKA_MAX_BYTES
 	elif [[ $arg == --groups ]]; then
-		for i in $(kafka-consumer-groups.sh --bootstrap-server $KAFKA_ADDR --list);do kafka-consumer-groups.sh --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe;done
+		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe;done
 	elif [[ $arg == --reset ]]; then
 		log "Starting all-consuming consumer of $sched_group group for $sched_topic (Ctrl-C to quit)..."
-		kafka-verifiable-consumer.sh --broker-list $KAFKA_ADDR --topic $sched_topic --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
+		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $sched_topic --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
 	elif [[ $arg == --db       ]]; then sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
 	elif [[ $arg == --db-wipe  ]]; then sql "delete from schedule"; mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
 	elif [[ $arg == --db-count ]]; then
