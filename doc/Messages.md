@@ -3,16 +3,15 @@
 ### Zebedee
 
 **Publish** to topic:
-  - "uk.gov.ons.dp.web.schedule"
+ - "uk.gov.ons.dp.web.schedule"
   ```
   action: "publish|cancel",
   collectionId: "<string>",
   publishTime: <epoch>,
   encryptionKey: "<string>",
   ```
-
- - `publishTime` may be optional if `action` is `cancel` (i.e. do not publish)
- - `action:"cancel"` is not yet supported
+  - `publishTime` may be optional if `action` is `cancel` (i.e. do not publish)
+  - `action:"cancel"` is not yet supported
 
 ### Publish-scheduler
 
@@ -35,16 +34,25 @@ Then, at appropriate time...
  fileCount: count,
  ```
 
+**Consume** topic "uk.gov.ons.dp.web.complete-file-flag"
+ - Update schedule as complete when the count of these messages matches the expected for this collection.
+
 ### Publish-sender
 
 **Consume** topic "uk.gov.ons.dp.web.publish-file"
 
-**Publish** to topic "uk.gov.ons.dp.web.complete-file":
+**Publish**
+ - to topic "uk.gov.ons.dp.web.complete-file":
   ```
   collectionId: "<string>",
   fileLocation: "<string>",
   fileContent: "<data.json>",
   ```
+ - to topic "uk.gov.ons.dp.web.complete-file-flag"
+ ```
+ collectionId: "<string>",
+ fileLocation: "<string>",
+ ```
 
 ### Static-content-migrator
 
@@ -52,25 +60,14 @@ Then, at appropriate time...
 
 **Output**
  - static content is decrypted and placed in an S3 bucket
- - publish to topic "uk.gov.ons.dp.web.complete-file" -
+ - to topic "uk.gov.ons.dp.web.complete-file":
+  ```
+  collectionId: "<string>",
+  fileLocation: "<string>",
+  s3Location: "<data.json>",
+  ```
+ - publish to topic "uk.gov.ons.dp.web.complete-file-flag"
    (cf _Publish-sender_ above):
-   ```
-   collectionId: "<string>",
-   fileLocation: "<string>",
-   s3Location: "<string>",
-   ```
-
-### Publish-tracker
-
-**Consume** topics:
- - "uk.gov.ons.dp.web.publish-count"
- - "uk.gov.ons.dp.web.complete-file"
-
-**Output**
- - "uk.gov.ons.dp.web.complete"
- ```
- collectionId: "<string>",
- ```
 
 ---
 
@@ -78,8 +75,6 @@ Then, at appropriate time...
 
 ### publish-receiver
 
-**Consume** topics:
-- "uk.gov.ons.dp.web.complete-file"
-- "uk.gov.ons.dp.web.complete"
+**Consume** topic "uk.gov.ons.dp.web.complete-file"
 
 **Output** Content is written to database (metadata or s3URL)

@@ -1,6 +1,7 @@
 ### Publish-scheduler
 
 A service which schedules and initiates release of Zebedee collections.
+Also marks them complete when sufficient file complete messages have been received.  The schedule is stored in postgres.
 
 Schedule messages are received via a kafka topic (see below). Examples of inbound messages:
 ```
@@ -21,7 +22,7 @@ Example of an output message:
 * `SCHEDULE_TOPIC` defaults to "uk.gov.ons.dp.web.schedule"
 * `PUBLISH_COUNT_TOPIC` defaults to "uk.gov.ons.dp.web.publish-count"
 * `PUBLISH_FILE_TOPIC` defaults to "uk.gov.ons.dp.web.publish-file"
-* `COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete"
+* `COMPLETE_FILE_FLAG_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file-flag"
 * `DB_ACCESS` defaults to "user=dp dbname=dp sslmode=disable"
 
 #### Installation
