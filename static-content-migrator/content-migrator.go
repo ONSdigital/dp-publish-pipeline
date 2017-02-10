@@ -28,7 +28,7 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, compl
 		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
 		if decryptErr == nil {
-			s3Client.AddObject(string(content), message.FileLocation)
+			s3Client.AddObject(string(content), message.FileLocation, message.CollectionId)
 			s3Location := "s3://" + bucketName + message.FileLocation
 			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: s3Location})
 			completeFileProducer.Output <- fileComplete
