@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 usage() {
-	cat <<EOF
-	$0 <args...>
+	sed 's/^	//' <<EOF
+	$(basename $0) <args...>
 		--up		- start all the processes (default) (see --svc)
 		--ps		- list all running processes
 		--kill		- kill all running processes
@@ -14,9 +14,10 @@ usage() {
 		--rotate	- rotate all logfiles
 		--time [ext]	- show logs of main (first,last) events [logs with .ext]
 
-		--seed collID [collIDend] [:sec_offset]
-				- show the JS messages to schedule collID[..collID2]
-					start now (default) or next minute+sec_offset
+		--seed collID [collID_end] [:offset_sec] [+stagger_sec]
+				- show the JS messages to schedule collID[..collID_end]
+					- start collID now (default) or next minute+<offset_sec>
+					- start N+1th job <stagger_sec> after Nth (default=0)
 		-p		- run the kafka producer (e.g. dp --seed test0001|dp -p)
 
 		--resize	- change the message size for kafka
@@ -124,11 +125,13 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --restart ]]; then set -- --kill --ps --rotate --up --sleep 1 --tail "$@"
 	elif [[ $arg == --rotate  ]]; then date=$(date '+%Y%m%d-%H%M%S'); log Logs get extension .$date; for i in $LOG_DIR/*.log; do mv $i $i.$date; done
 	elif [[ $arg == --seed    ]]; then
-		when=0 coll= end_coll=
+		when=0 coll= end_coll= stagger=0
 		while [[ -n $1 ]]; do
 			if [[ -z $coll ]]; then
 				coll=$1
 				end_coll=$coll
+			elif [[ $1 =~ "+"[0-9]+ ]]; then
+				stagger=${1#+}
 			elif [[ $1 =~ :[0-9]+ ]]; then
 				if [[ $os == Darwin ]]; then # it's a dev mac
 					when=$(date -v+1M -v${1#:}S '+%s')  # get time for next minute and $1 secs
@@ -152,9 +155,10 @@ while [[ -n $1 ]]; do
 			# echo c=$c len=$len col=$col
 			key=$(awk '$1=="'"$col"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $col
 			echo '{"CollectionID":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'"}'
+			(( stagger > 0 )) && let when+=stagger
 			let count++
 		done
-		warn scheduled $(colr $count) jobs for $(colr $when_pp)
+		warn scheduled $(colr $count) jobs from $(colr $when_pp) ... each $stagger sec
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
 	elif [[ $arg == -c ]]; then log Starting consumer...; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $sched_topic
