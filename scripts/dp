@@ -107,20 +107,21 @@ while [[ -n $1 ]]; do
 		elif [[ $arg == --ps   ]]; then
 			pgrep -${p_flags}lx "$proc_re"; res=$?
 		fi
-	elif [[ $arg == --tail    ]]; then log Tailing...; tail -f $LOG_DIR/*.log
+	elif [[ $arg == --sleep   ]]; then log Sleeping to let logfiles be created...; sleep $1; shift
+	elif [[ $arg == --tail    ]]; then log Tailing...; exec tail -f $LOG_DIR/*.log
 	elif [[ $arg == --time    ]]; then
 					ext=.log; if [[ -n $1 && $1 == [0-9]* ]]; then ext=.log.$1; shift; fi
 					cd $LOG_DIR || exit 2
 					(
-						grep 'start:' scheduler$ext				|sort -n |tail -2
-						grep 'completed' scheduler$ext				|sort -n |tail -2
-						grep 'ERROR' scheduler$ext				|sort -n |tail -2
-						test -f tracker.log && grep Completed tracker$ext	|sort -n |tail -1
-						tail -qn 1 sender*$ext					|sort -n |tail -1
-						tail -qn 1 migrator*$ext				|sort -n |tail -1
-						tail -qn 20 receiver*$ext |grep Inserted		|sort -n |tail -1
+						test -f scheduler.log && grep 'start:' scheduler$ext				|sort -n |tail -2
+						test -f scheduler.log && grep 'completed' scheduler$ext				|sort -n |tail -2
+						test -f scheduler.log && grep 'ERROR' scheduler$ext				|sort -n |tail -2
+						test -f tracker.log   && grep Completed tracker$ext	|sort -n |tail -1
+						test -f sender.log    && tail -qn 1 sender*$ext					|sort -n |tail -1
+						test -f migrator.log  && tail -qn 1 migrator*$ext				|sort -n |tail -1
+						test -f receiver.log  && tail -qn 20 receiver*$ext |grep Inserted		|sort -n |tail -1
 					)|sort -n
-	elif [[ $arg == --restart ]]; then set -- --kill --ps --rotate --up --tail "$@"
+	elif [[ $arg == --restart ]]; then set -- --kill --ps --rotate --up --sleep 1 --tail "$@"
 	elif [[ $arg == --rotate  ]]; then date=$(date '+%Y%m%d-%H%M%S'); log Logs get extension .$date; for i in $LOG_DIR/*.log; do mv $i $i.$date; done
 	elif [[ $arg == --seed    ]]; then
 		when=0 coll= end_coll=
