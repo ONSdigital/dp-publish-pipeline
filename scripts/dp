@@ -63,6 +63,7 @@ LOG_DIR=~/log
 sched_topic=uk.gov.ons.dp.web.schedule sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
 SERVICES=${SERVICES:-publish-sender:$def_svc_num static-content-migrator:$def_svc_num publish-receiver:$def_svc_num publish-scheduler}
 
+colr() { echo -e '\e[32m'"$@"'\e[0m'; }
 log()  { echo -e '\e[36m'$(date '+%Y-%m-%d %H:%M:%S')'\e[0m' "$@"; }
 warn() { log "$@" >&2; }
 die()  { warn "$@"; exit 2; }
@@ -130,8 +131,10 @@ while [[ -n $1 ]]; do
 			elif [[ $1 =~ :[0-9]+ ]]; then
 				if [[ $os == Darwin ]]; then # it's a dev mac
 					when=$(date -v+1M -v${1#:}S '+%s')  # get time for next minute and $1 secs
+					when_pp=$(date -r $when)
 				else
 					when=$(date -d "1 minute -$(date '+%S') seconds ${1#:} seconds" '+%s')  # get time for next minute:00 add $1 secs
+					when_pp=$(date -d'@'$when)
 				fi
 			elif [[ -d $ZEBEDEE_ROOT/collections/$1/complete ]]; then
 				end_coll=$1
@@ -142,12 +145,15 @@ while [[ -n $1 ]]; do
 		done
 		[[ -z $coll ]] && usage 1 >&2
 		shopt -s extglob # for the regexes in the for() (remove leading zeroes otherwise bash thinks it is octal)
+		count=0
 		for (( c=${coll##test*(0)}; c <= ${end_coll##test*(0)}; c++ )); do
 			len=${#c} col=${coll:0:-len}$c       # get prefix of $coll removing length of $c (i.e. coll=test0009,c=10 so len=2 col=test0010)
 			# echo c=$c len=$len col=$col
 			key=$(awk '$1=="'"$col"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $col
 			echo '{"CollectionID":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'"}'
+			let count++
 		done
+		warn scheduled $(colr $count) jobs for $(colr $when_pp)
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
 	elif [[ $arg == -c ]]; then log Starting consumer...; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $sched_topic
