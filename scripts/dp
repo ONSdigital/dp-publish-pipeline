@@ -32,21 +32,29 @@ EOF
 
 os=$(uname -s)
 if [[ $os == Darwin ]]; then # it's a dev mac
-    export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-./test-data}
-    def_svc_num=3
-    export MONGODB=${MONGODB:-localhost:27017}
-    start_kafka=
-    PATH=$PATH:$PWD/build/darwin-amd64
-    k_ext=
+	export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-./test-data}
+	def_svc_num=3
+	export MONGODB=${MONGODB:-localhost:27017}
+	start_kafka=
+	PATH=$PATH:$PWD/build/darwin-amd64
+	k_ext=
+	use_src=1
+	p_flags=
 else # aws
-    export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-$HOME/test-data}
-    def_svc_num=20
-    # the below line assumes you update the IP with: sudo vi /etc/hosts
-    export MONGODB=${MONGODB:-mongo:27017}
-    # add kafka commands to PATH
-    PATH=$PATH:/opt/kafka_2.10-0.10.1.0/bin
-    start_kafka=1
-    k_ext=.sh
+	export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-$HOME/test-data}
+	def_svc_num=20
+	# the below line assumes you update the IP with: sudo vi /etc/hosts
+	export MONGODB=${MONGODB:-mongo:27017}
+	# add kafka commands to PATH
+	PATH=$PATH:/opt/kafka_2.10-0.10.1.0/bin
+	[[ -d ~kafka ]] && start_kafka=1
+	k_ext=.sh
+	use_src=
+	p_flags=f
+	if [[ -n $DB_ACCESS ]]; then
+		psql_args=${DB_ACCESS%/*} # remove /dbname
+		psql_args="--host ${psql_args#*@}" # remove postgresql://user@
+	fi
 fi
 export zebedee_root=$ZEBEDEE_ROOT KAFKA_MAX_BYTES=${KAFKA_MAX_BYTES:-10000000} MONGODB_DB=${MONGODB_DB:-onswebsite}
 export ZOOKEEPER=${ZOOKEEPER:-localhost:2181} KAFKA_ADDR=${KAFKA_ADDR:-localhost:9092}
@@ -58,14 +66,20 @@ SERVICES=${SERVICES:-publish-sender:$def_svc_num static-content-migrator:$def_sv
 log()  { echo -e '\e[36m'$(date '+%Y-%m-%d %H:%M:%S')'\e[0m' "$@"; }
 warn() { log "$@" >&2; }
 die()  { warn "$@"; exit 2; }
-sql()      { echo "$@" > $tmp_file.sql || die Cannot write to $tmp_file.sql; psql -U dp dp -f $tmp_file.sql;      rm -f $tmp_file.sql; }
+sql()      { echo "$@" > $tmp_file.sql || die Cannot write to $tmp_file.sql; psql $psql_args -U dp dp -f $tmp_file.sql;      rm -f $tmp_file.sql; }
 mongo_js() {  mongo $MONGODB/$MONGODB_DB --quiet --eval "$@"; }
 # mongo_js() { echo "$@" > $tmp_file.js  || die Cannot write to $tmp_file.js;  mongo $MONGODB/$MONGODB_DB --quiet $tmp_file.js; rm -f $tmp_file.js; }
 ensure_kafka() { ps -ef | grep -q ' java .* [k]afka' && return; warn No kafka - starting...; sudo -i -u kafka ~kafka/bin/start-kafka; }
 # ensure_mongo() { sudo docker ps| grep -q 'mongo' && return;     warn No mongo - starting...; sudo docker start $MONGODB_DB; }
-kick_off() { local n=$1 cmd=$2 l=${2%.sh}; shift 2; l=${l##*-}; for (( i=0; i<n; i++ )); do e=; if (( i > 0 )); then e=$i; fi
+kick_off() { local n=$1 cmd=$2 l=${2%.sh}; shift 2; l=${l%.go}; l=${l##*-}
+	# put bg commands into their own process group - so that killing this script doesn't kill $cmd
+	set -o monitor
+	for (( i=0; i<n; i++ )); do
+		e=; if (( i > 0 )); then e=$i; fi
+		# echo $cmd $LOG_DIR/$l$e.log
 		nohup $cmd >> $LOG_DIR/$l$e.log 2>&1 &
-done; }
+	done
+}
 
 [[ -n $start_kafka ]] && ensure_kafka
 # ensure_mongo
@@ -78,26 +92,23 @@ while [[ -n $1 ]]; do
 	arg=$1; shift
 	if   [[ $arg == -h || $arg == --help ]]; then usage; break
 	elif [[ $arg == --svc     ]]; then SERVICES=$1; shift
-	elif [[ $arg == --kill    ]]; then
-		killable=
+	elif [[ $arg == --kill || $arg == --ps ]]; then
+		proc_re=
 		for s in $SERVICES; do
 			s=${s%:*}
-			s=${s#static-}
-			if [[ $os == Darwin ]]; then
-				log Killing... $s
-				killall $s
-			else
-				killable=$killable${killable:+|}$s
-			fi
+			proc_re=$proc_re${proc_re:+|}${s#static-}
 		done
-		if [[ $os != Darwin ]]; then
-			log Killing... $killable
-			killall -r "^($killable)\$"
+		log ${arg#--}... $proc_re
+		if   [[ $arg == --kill ]]; then
+			if [[ $os == Darwin ]]; then	pkill -x "$proc_re"
+			else				killall -r "^($proc_re)\$"
+			fi
+		elif [[ $arg == --ps   ]]; then
+			pgrep -${p_flags}lx "$proc_re"; res=$?
 		fi
-	elif [[ $arg == --ps      ]]; then log Processes:; ps -ef | egrep --color '\.[0-9]+ \b([p]ublish-|[c]ontent-)'; res=$?
 	elif [[ $arg == --tail    ]]; then log Tailing...; tail -f $LOG_DIR/*.log
 	elif [[ $arg == --time    ]]; then
-					ext=.log; if [[ -n $1 ]]; then ext=.log.$1; shift; fi
+					ext=.log; if [[ -n $1 && $1 == [0-9]* ]]; then ext=.log.$1; shift; fi
 					cd $LOG_DIR || exit 2
 					(
 						grep 'start:' scheduler$ext				|sort -n |tail -2
@@ -117,7 +128,11 @@ while [[ -n $1 ]]; do
 				coll=$1
 				end_coll=$coll
 			elif [[ $1 =~ :[0-9]+ ]]; then
-				when=$(date -v+1M -v${1#:}S '+%s')  # get time for next minute and $1 secs
+				if [[ $os == Darwin ]]; then # it's a dev mac
+					when=$(date -v+1M -v${1#:}S '+%s')  # get time for next minute and $1 secs
+				else
+					when=$(date -d "1 minute -$(date '+%S') seconds ${1#:} seconds" '+%s')  # get time for next minute:00 add $1 secs
+				fi
 			elif [[ -d $ZEBEDEE_ROOT/collections/$1/complete ]]; then
 				end_coll=$1
 			else
@@ -147,7 +162,7 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --db       ]]; then sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
 	elif [[ $arg == --db-wipe  ]]; then sql "delete from schedule"; mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
 	elif [[ $arg == --db-count ]]; then
-		sql_count=$(psql -U dp dp -t -c "select count(*) from schedule");         [[ -z $sql_count    ]] && die Could not count DB
+		sql_count=$(psql $psql_args -U dp dp -t -c "select count(*) from schedule");         [[ -z $sql_count    ]] && die Could not count DB
 		mongo_counts=$(mongo_js "print(db.s3.count() + ' ' + db.meta.count());"); [[ -z $mongo_counts ]] && die Bad mongo count
 		log SQL: $sql_count s3: ${mongo_counts/ / meta: } total: $(( ${mongo_counts/ /+} ))
 	elif [[ $arg == --db-index ]]; then
@@ -164,10 +179,12 @@ while [[ -n $1 ]]; do
 				s=${s%:*}
 			fi
 			sh=~/bin/run-$s.sh
-			s=${s#static-}
-			if [[ -x $sh ]]; then
+			if [[ -n $use_src ]]; then
+				kick_off $num "go run $s/${s#static-}.go"
+			elif [[ -x $sh ]]; then
 				kick_off $num $sh
 			else
+				s=${s#static-}
 				kick_off $num $s
 			fi
 		done
