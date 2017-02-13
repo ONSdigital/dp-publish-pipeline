@@ -158,7 +158,7 @@ while [[ -n $1 ]]; do
 			(( stagger > 0 )) && let when+=stagger
 			let count++
 		done
-		warn scheduled $(colr $count) jobs from $(colr $when_pp) ... each $stagger sec
+		warn scheduled $(colr $count) jobs from $(colr $when_pp) ... then $stagger sec apart
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
 	elif [[ $arg == -c ]]; then log Starting consumer...; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $sched_topic
