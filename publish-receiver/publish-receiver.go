@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"os"
@@ -9,13 +10,13 @@ import (
 	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
-	mongo "github.com/ONSdigital/dp-publish-pipeline/mongodb"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	_ "github.com/lib/pq"
 )
 
 const FILE_COMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
 
-func storeData(jsonMessage []byte, client *mongo.MongoClient) {
+func storeData(jsonMessage []byte, s3 *sql.Stmt, meta *sql.Stmt) {
 	var dataSet kafka.FileCompleteMessage
 	err := json.Unmarshal(jsonMessage, &dataSet)
 	if err != nil {
@@ -27,30 +28,36 @@ func storeData(jsonMessage []byte, client *mongo.MongoClient) {
 		return
 	}
 	if dataSet.S3Location != "" {
-		s3document := mongo.S3Document{dataSet.CollectionId, dataSet.FileLocation, dataSet.S3Location}
-		addS3Document(client, s3document)
+		addS3Data(dataSet, s3)
 	} else if dataSet.FileContent != "" {
-		lang := getLanguage(dataSet.FileLocation)
-		metaDocument := mongo.MetaDocument{dataSet.CollectionId, lang,
-			resloveURI(dataSet.FileLocation), dataSet.FileContent}
-		addMetaDocument(client, metaDocument)
+		addMetadata(dataSet, meta)
 	}
 }
 
-func addS3Document(client *mongo.MongoClient, doc mongo.S3Document) {
-	err := client.AddS3Data(doc)
+func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
+	lang := getLanguage(dataSet.FileLocation)
+	results, err := s3.Query(dataSet.CollectionId,
+		resloveURI(dataSet.FileLocation)+"?lang="+lang,
+		dataSet.S3Location)
 	if err != nil {
-		log.Fatalf("Failed to add s3 document. S3Document %+v :", doc)
+		log.Printf("Error : %s", err.Error())
+	} else {
+		log.Printf("Added S3 : %s", dataSet.FileLocation)
+		results.Close()
 	}
-	log.Printf("Collection %q Inserted into %q resource %s", doc.CollectionId, "S3", doc.FileLocation)
 }
 
-func addMetaDocument(client *mongo.MongoClient, doc mongo.MetaDocument) {
-	err := client.AddPage(doc)
+func addMetadata(dataSet kafka.FileCompleteMessage, meta *sql.Stmt) {
+	lang := getLanguage(dataSet.FileLocation)
+	results, err := meta.Query(dataSet.CollectionId,
+		resloveURI(dataSet.FileLocation)+"?lang="+lang,
+		dataSet.FileContent)
 	if err != nil {
-		log.Fatalf("Failed to add meta document. MetaDocument %+v :", doc)
+		log.Printf("Error : %s", err.Error())
+	} else {
+		log.Printf("Added metadata : %s", dataSet.FileLocation)
+		results.Close()
 	}
-	log.Printf("Collection %q Inserted page into %s at %s", doc.CollectionId, "meta", doc.FileLocation)
 }
 
 func getLanguage(uri string) string {
@@ -82,15 +89,35 @@ func resloveURI(uri string) string {
 	return uri
 }
 
+func prep(sql string, db *sql.DB) *sql.Stmt {
+	statement, err := db.Prepare(sql)
+	if err != nil {
+		log.Panicf("Error: Could not prepare statement on database: %s", err.Error())
+	}
+	return statement
+}
+
 func main() {
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
-	fileCompleteConsumer := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
+	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 
-	client, connectionErr := mongo.CreateClient()
-	defer client.Close()
-	if connectionErr != nil {
-		log.Fatalf("Failed to connect to mongodb. Error : %s", connectionErr.Error())
+	fileCompleteConsumer := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
+	db, err := sql.Open("postgres", dbSource)
+	if err != nil {
+		log.Panicf("DB open error: %s", err.Error())
 	}
+
+	s3Upsert := "INSERT INTO s3data(collection_id, uri, s3) VALUES($1, $2, $3) " +
+		"ON CONFLICT(uri) DO UPDATE " +
+		"SET (collection_id, s3) = ($1, $3)"
+	s3statement := prep(s3Upsert, db)
+	defer s3statement.Close()
+
+	metaUpsert := "INSERT INTO metadata(collection_id, uri, content) VALUES($1, $2, $3) " +
+		"ON CONFLICT(uri) DO UPDATE " +
+		"SET (collection_id, content) = ($1, $3)"
+	metaStatement := prep(metaUpsert, db)
+	defer metaStatement.Close()
 
 	log.Printf("Started publish receiver on %q", fileCompleteTopic)
 
@@ -99,7 +126,7 @@ func main() {
 	for {
 		select {
 		case consumerMessage := <-fileCompleteConsumer.Incoming:
-			storeData(consumerMessage.GetData(), &client)
+			storeData(consumerMessage.GetData(), s3statement, metaStatement)
 			consumerMessage.Commit()
 		case <-signals:
 			log.Printf("Service stopped")
