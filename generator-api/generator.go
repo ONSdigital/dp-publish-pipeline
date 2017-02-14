@@ -20,6 +20,8 @@ const mongodbHost = "MONGODB"
 const xlsFormat = "xls"
 const csvFormat = "csv"
 
+var db *mgo.Database
+
 func generateFile(w http.ResponseWriter, r *http.Request) {
 	format, uri, err := findParams(r)
 	if err != nil {
@@ -105,12 +107,6 @@ func findFilterParams(query *http.Request) DataFilter {
 }
 
 func loadPageData(uri string) ([]byte, error) {
-	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
-	if err != nil {
-		return nil, err
-	}
-	defer dbSession.Close()
-	db := dbSession.DB(dataBase)
 	var record Record
 	notFoundErr := db.C(metaCollection).Find(bson.M{"fileLocation": uri}).One(&record)
 	if notFoundErr != nil {
@@ -119,7 +115,19 @@ func loadPageData(uri string) ([]byte, error) {
 	return []byte(record.FileContent), nil
 }
 
+func dialDb(dbHost string) (*mgo.Session, error) {
+	dbSession, err := mgo.Dial(dbHost)
+	return dbSession, err
+}
+
 func main() {
+	dbSession, err := dialDb(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
+	if err != nil {
+		panic(err)
+	}
+	defer dbSession.Close()
+	db = dbSession.DB(dataBase)
+
 	port := utils.GetEnvironmentVariable("PORT", "8092")
 	http.HandleFunc("/generator", generateFile)
 	http.HandleFunc("/export", exportFiles)

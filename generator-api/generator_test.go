@@ -9,7 +9,6 @@ import (
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	. "github.com/smartystreets/goconvey/convey"
-	mgo "gopkg.in/mgo.v2"
 )
 
 const timeseriesData = "test-data/timeseries.json"
@@ -197,14 +196,19 @@ func TestNoParameters(t *testing.T) {
 	}
 }
 
+func TestExtro(t *testing.T) {
+	if isMongodbAvailable() {
+		DropTestData()
+	}
+}
+
 func isMongodbAvailable() bool {
-	session, err := mgo.Dial(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
+	session, err := dialDb(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
 	if err != nil {
 		return false
-	} else {
-		session.Close()
-		return true
 	}
+	db = session.DB(dataBase)
+	return true
 }
 
 func loadTimeseries(file string) []byte {
@@ -228,11 +232,9 @@ func AddTestData(url string, data []byte) {
 	record.CollectionId = "DataSet-456456"
 	record.FileLocation = url
 	record.FileContent = string(data)
-	dbSession, err := mgo.Dial(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
-	if err != nil {
-		panic(err)
-	}
-	defer dbSession.Close()
-	db := dbSession.DB(dataBase)
 	db.C(metaCollection).Insert(record)
+}
+
+func DropTestData() {
+	db.C(metaCollection).Remove(Record{CollectionId: "DataSet-456456"})
 }
