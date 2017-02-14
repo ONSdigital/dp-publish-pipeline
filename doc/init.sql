@@ -23,5 +23,5 @@ CREATE TABLE s3data(id SERIAL PRIMARY KEY,
 
 CREATE TABLE metadata(id SERIAL PRIMARY KEY,
                       collection_id varchar(128) NOT NULL,
-                      uri varc har(512) NOT NULL UNIQUE,
+                      uri varchar(512) NOT NULL UNIQUE,
                       content json NOT NULL);
