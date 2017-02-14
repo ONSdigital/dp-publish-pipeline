@@ -1,6 +1,6 @@
 package kafka
 
-/* not used externally yet - message is within publish-scheduler
+/* PublishMessage is not used externally yet - message is within publish-scheduler
 type PublishMessage struct {
 	CollectionId  string
 	EncryptionKey string
