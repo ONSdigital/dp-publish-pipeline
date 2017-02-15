@@ -23,9 +23,9 @@ usage() {
 		--resize	- change the message size for kafka
 		--groups	- show the kafka
 
-		--db		- show the DB table kschedule'
-		--db-wipe	- clear the DB table 'schedule'
-		--db-count	- show the count of rows in 'schedule', and docs in mongo
+		--db		- show the DB table 'schedule'
+		--db-wipe	- clear the DB tables 'schedule', 's3data', 'metadata'
+		--db-count	- show the count of rows in the --db-wipe tables, and docs in mongo
 		--db-index	- ensure mongo indexes exist and show them
 EOF
 	[[ -n $1 ]] && exit $1
@@ -68,8 +68,10 @@ colr() { echo -e '\e[32m'"$@"'\e[0m'; }
 log()  { echo -e '\e[36m'$(date '+%Y-%m-%d %H:%M:%S')'\e[0m' "$@"; }
 warn() { log "$@" >&2; }
 die()  { warn "$@"; exit 2; }
-sql()      { echo "$@" > $tmp_file.sql || die Cannot write to $tmp_file.sql; psql $psql_args -U dp dp -f $tmp_file.sql;      rm -f $tmp_file.sql; }
-mongo_js() {  mongo $MONGODB/$MONGODB_DB --quiet --eval "$@"; }
+# sql()      { echo "$@" > $tmp_file.sql || die Cannot write to $tmp_file.sql; psql $psql_args -U dp dp -f $tmp_file.sql;      rm -f $tmp_file.sql; }
+sql()      { psql $psql_args -U dp dp -c "$@"; }
+sql_sh()   { psql $psql_args -U dp dp -t -c "$@"; }
+mongo_js() { mongo $MONGODB/$MONGODB_DB --quiet --eval "$@"; }
 # mongo_js() { echo "$@" > $tmp_file.js  || die Cannot write to $tmp_file.js;  mongo $MONGODB/$MONGODB_DB --quiet $tmp_file.js; rm -f $tmp_file.js; }
 ensure_kafka() { ps -ef | grep -q ' java .* [k]afka' && return; warn No kafka - starting...; sudo -i -u kafka ~kafka/bin/start-kafka; }
 # ensure_mongo() { sudo docker ps| grep -q 'mongo' && return;     warn No mongo - starting...; sudo docker start $MONGODB_DB; }
@@ -171,11 +173,11 @@ while [[ -n $1 ]]; do
 		log "Starting all-consuming consumer of $sched_group group for $sched_topic (Ctrl-C to quit)..."
 		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $sched_topic --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
 	elif [[ $arg == --db       ]]; then sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
-	elif [[ $arg == --db-wipe  ]]; then sql "delete from schedule"; mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
+	elif [[ $arg == --db-wipe  ]]; then sql "delete from schedule;delete from s3data;delete from metadata"; mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
 	elif [[ $arg == --db-count ]]; then
-		sql_count=$(psql $psql_args -U dp dp -t -c "select count(*) from schedule");         [[ -z $sql_count    ]] && die Could not count DB
+		sql_counts=$(for i in schedule s3data metadata; do echo $i:$(sql_sh "select count(*) from $i");done); [[ -z $sql_counts ]] && die Could not count DB
 		mongo_counts=$(mongo_js "print(db.s3.count() + ' ' + db.meta.count());"); [[ -z $mongo_counts ]] && die Bad mongo count
-		log SQL: $sql_count s3: ${mongo_counts/ / meta: } total: $(( ${mongo_counts/ /+} ))
+		log SQL: $sql_counts MONGO: s3: ${mongo_counts/ / meta: } total: $(( ${mongo_counts/ /+} ))
 	elif [[ $arg == --db-index ]]; then
 		mongo_js 'print(JSON.stringify(db.s3.createIndex({fileLocation:1}), null, 8),JSON.stringify(db.meta.createIndex({fileLocation:1,language:1}), null, 8))'
 		# colls_js='var colls=["s3","meta"];' for_colls_js="$colls_js"'for(len=colls.length, i=0; i<len; i++)'
