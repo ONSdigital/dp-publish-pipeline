@@ -68,7 +68,7 @@ func getLanguage(uri string) string {
 }
 
 // Within the zebedee reader it builds the uri based of what it is given. Instead
-// of repeating this per HTTP request, mongo stores the URI the website expects
+// of repeating this per HTTP request, postgrese stores the URI the website expects
 // So the content-api does not need to build the uri each time.
 // Examples :
 //  File location                : URI
@@ -77,13 +77,13 @@ func getLanguage(uri string) string {
 //  timeseries/mmg/hhh/data.json => /timeseries/mmg/hhh
 //  trade/report/938438.json     => /trade/report/938438 (Special case for charts)
 func resloveURI(uri string) string {
-	if strings.Contains(uri, "data.json") || strings.Contains(uri, "data_cy.json") {
+	if strings.HasSuffix(uri, "data.json") || strings.Contains(uri, "data_cy.json") {
 		if uri == "data.json" {
 			return "/"
 		}
 		webURI := "/" + filepath.Dir(uri)
 		return webURI
-	} else if strings.Contains(uri, ".json") {
+	} else if strings.HasSuffix(uri, ".json") {
 		return "/" + uri[:len(uri)-5]
 	}
 	return uri

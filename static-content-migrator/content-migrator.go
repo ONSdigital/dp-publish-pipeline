@@ -10,6 +10,7 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/s3"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	uuid "github.com/satori/go.uuid"
 )
 
 func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, completeFileProducer, completeFileFlagProducer kafka.Producer) {
@@ -28,9 +29,10 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, compl
 		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
 		if decryptErr == nil {
-			s3Client.AddObject(string(content), message.FileLocation, message.CollectionId)
-			s3Location := "s3://" + bucketName + message.FileLocation
-			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: s3Location})
+			s3Path := filepath.Join(uuid.NewV1().String(), message.CollectionId, filepath.Base(message.FileLocation))
+			s3Client.AddObject(string(content), s3Path)
+			fullS3Path := "s3://" + bucketName + "/" + s3Path
+			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: fullS3Path})
 			completeFileProducer.Output <- fileComplete
 			fileComplete, _ = json.Marshal(kafka.FileCompleteFlagMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation})
 			completeFileFlagProducer.Output <- fileComplete
