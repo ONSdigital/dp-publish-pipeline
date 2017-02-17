@@ -20,7 +20,7 @@ See the following pages per service
 ### Event messages
 See [Event Message](doc/Messages.md) for details on each topic and type of message sent
 
-### Latest test results (2017 Feburary)
+### Latest test results (2017 February)
 Machines: AWS M4.large, M3.xlarge, M4.large
 
 #### AWS setup
