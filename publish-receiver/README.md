@@ -23,6 +23,7 @@ Test data examples for 'uk.gov.ons.dp.web.complete' topic
 
 #### Environment variables
 * `zebedee_root` defaults to "."
+* `DB_ACCESS` defaults to "user=dp dbname=dp sslmode=disable"
 * `FILE_COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file"
 * `KAFKA_ADDR` defaults to "localhost:9092"
 
@@ -30,4 +31,6 @@ Test data examples for 'uk.gov.ons.dp.web.complete' topic
 
 Need to run these, only once:
 * Install kafka server ```brew install kafka```
+* install postgres server ```brew install postgres```
+* Run the following SQL script at `doc/init.sql`
 * Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```
