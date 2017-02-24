@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"path/filepath"
 	"strings"
@@ -13,33 +14,31 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, completeFileProducer, completeFileFlagProducer kafka.Producer) {
+func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, completeFileProducer, completeFileFlagProducer kafka.Producer) error {
 	var message kafka.PublishFileMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
-		log.Printf("Invalid json message received")
-		return
+		return fmt.Errorf("Invalid JSON: %q", jsonMessage)
 	}
 	if message.CollectionId == "" || message.EncryptionKey == "" || message.FileLocation == "" {
-		log.Printf("Json message missing fields : %s", string(jsonMessage))
-		return
+		return fmt.Errorf("Malformed JSON: %q", jsonMessage)
 	}
 	if !strings.HasSuffix(message.FileLocation, ".json") {
-		// log.Printf("Collection %q - start %q", message.CollectionId, message.FileLocation)
 		s3Client := s3.CreateClient(bucketName)
-		path := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
+		path := filepath.Join(zebedeeRoot, "collections", message.CollectionPath, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
 		if decryptErr == nil {
-			s3Path := filepath.Join(uuid.NewV1().String(), message.CollectionId, filepath.Base(message.FileLocation))
-			s3Client.AddObject(string(content), s3Path)
+			s3Path := filepath.Join(uuid.NewV1().String(), message.CollectionPath, filepath.Base(message.FileLocation))
+			s3Client.AddObject(string(content), s3Path, message.CollectionId, message.ScheduleId)
 			fullS3Path := "s3://" + bucketName + "/" + s3Path
-			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: fullS3Path})
+			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: fullS3Path})
 			completeFileProducer.Output <- fileComplete
-			fileComplete, _ = json.Marshal(kafka.FileCompleteFlagMessage{CollectionId: message.CollectionId, FileLocation: message.FileLocation})
+			fileComplete, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation})
 			completeFileFlagProducer.Output <- fileComplete
 		} else {
-			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, path)
+			return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %s - error %s", message.ScheduleId, message.CollectionId, message.FileId, path, decryptErr)
 		}
 	}
+	return nil
 }
 
 func main() {
@@ -58,8 +57,11 @@ func main() {
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
-			uploadFile(zebedeeRoot, consumerMessage.GetData(), bucketName, completeFileProducer, completeFileFlagProducer)
-			consumerMessage.Commit()
+			if err := uploadFile(zebedeeRoot, consumerMessage.GetData(), bucketName, completeFileProducer, completeFileFlagProducer); err != nil {
+				log.Print(err)
+			} else {
+				consumerMessage.Commit()
+			}
 		}
 	}
 }

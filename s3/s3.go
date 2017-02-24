@@ -49,8 +49,8 @@ func (s3 *S3Client) GetObject(location string) ([]byte, error) {
 	return data, nil
 }
 
-func (s3 *S3Client) AddObject(content string, s3Location string, collectionId string) {
+func (s3 *S3Client) AddObject(content, s3Location, collectionId string, scheduleId int64) {
 	file := strings.NewReader(content)
 	s3.client.PutObject(s3.bucket, s3Location, file, "application/octet-stream")
-	log.Printf("Collection %q filed %q to s3:%s", collectionId, s3Location, s3.bucket)
+	log.Printf("Job %d Collection %q filed %q to s3:%s", scheduleId, collectionId, s3Location, s3.bucket)
 }

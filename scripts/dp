@@ -23,8 +23,8 @@ usage() {
 		--resize	- change the message size for kafka
 		--groups	- show the kafka
 
-		--db		- show the DB table 'schedule'
-		--db-wipe	- clear the DB tables 'schedule', 's3data', 'metadata'
+		--db		- show the DB table 'schedule', 'schedule_file'
+		--db-wipe	- clear the DB tables: $sql_tables
 		--db-count	- show the count of rows in the --db-wipe tables, and docs in mongo
 		--db-index	- ensure mongo indexes exist and show them
 EOF
@@ -34,7 +34,7 @@ EOF
 os=$(uname -s)
 if [[ $os == Darwin ]]; then # it's a dev mac
 	export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-./test-data}
-	def_svc_num=3
+	def_svc_num=${def_svc_num:-3}
 	export MONGODB=${MONGODB:-localhost:27017}
 	start_kafka=
 	PATH=$PATH:$PWD/build/darwin-amd64
@@ -43,7 +43,7 @@ if [[ $os == Darwin ]]; then # it's a dev mac
 	p_flags=
 else # aws
 	export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-$HOME/test-data}
-	def_svc_num=20
+	def_svc_num=${def_svc_num:-20}
 	# the below line assumes you update the IP with: sudo vi /etc/hosts
 	export MONGODB=${MONGODB:-mongo:27017}
 	# add kafka commands to PATH
@@ -61,8 +61,11 @@ export zebedee_root=$ZEBEDEE_ROOT KAFKA_MAX_BYTES=${KAFKA_MAX_BYTES:-10000000} M
 export ZOOKEEPER=${ZOOKEEPER:-localhost:2181} KAFKA_ADDR=${KAFKA_ADDR:-localhost:9092}
 
 LOG_DIR=~/log
-sched_topic=uk.gov.ons.dp.web.schedule sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
+KAFKA_TOPIC=${KAFKA_TOPIC:-uk.gov.ons.dp.web.schedule} sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
+KAFKA_PARTITIONS=${KAFKA_PARTITIONS:-12}
 SERVICES=${SERVICES:-publish-sender:$def_svc_num static-content-migrator:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
+sql_tables="schedule schedule_file s3data metadata"
+use_mongo=
 
 colr() { echo -e '\e[32m'"$@"'\e[0m'; }
 log()  { echo -e '\e[36m'$(date '+%Y-%m-%d %H:%M:%S')'\e[0m' "$@"; }
@@ -156,29 +159,38 @@ while [[ -n $1 ]]; do
 			len=${#c} col=${coll:0:-len}$c       # get prefix of $coll removing length of $c (i.e. coll=test0009,c=10 so len=2 col=test0010)
 			# echo c=$c len=$len col=$col
 			key=$(awk '$1=="'"$col"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $col
-			echo '{"CollectionID":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'"}'
+			echo '{"CollectionID":"'"Cn_$col"'","CollectionPath":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'"}'
 			(( stagger > 0 )) && let when+=stagger
 			let count++
 		done
 		warn scheduled $(colr $count) jobs from $(colr $when_pp) ... then $stagger sec apart
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
-	elif [[ $arg == -c ]]; then log Starting consumer...; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $sched_topic
-	elif [[ $arg == -p ]]; then log Starting producer...; kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $sched_topic
+	elif [[ $arg == -c ]]; then log Starting consumer... of $KAFKA_TOPIC; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $KAFKA_TOPIC
+	elif [[ $arg == -p ]]; then log Starting producer... to $KAFKA_TOPIC; kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC
 	elif [[ $arg == --resize ]]; then
 		kafka-configs$k_ext --zookeeper $ZOOKEEPER --entity-type topics --entity-name uk.gov.ons.dp.web.complete-file --alter --add-config max.message.bytes=$KAFKA_MAX_BYTES
+	elif [[ $arg == --repartition ]]; then
+		kafka-topics$k_ext --alter --zookeeper $ZOOKEEPER --partitions $KAFKA_PARTITIONS --topic $KAFKA_TOPIC
 	elif [[ $arg == --groups ]]; then
 		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe;done
 	elif [[ $arg == --reset ]]; then
-		log "Starting all-consuming consumer of $sched_group group for $sched_topic (Ctrl-C to quit)..."
-		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $sched_topic --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
-	elif [[ $arg == --db       ]]; then sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
-	elif [[ $arg == --db-wipe  ]]; then sql "delete from schedule;delete from s3data;delete from metadata"; mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
+		log "Starting all-consuming consumer of $sched_group group for $KAFKA_TOPIC (Ctrl-C to quit)..."
+		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
+	elif [[ $arg == --db       ]]; then
+		sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
+		sql "select schedule_id, count(complete_time) AS num_complete   from schedule_file where complete_time IS NOT NULL group by schedule_id order by schedule_id"
+		sql "select schedule_id, count(complete_time) AS num_incomplete from schedule_file where complete_time IS NULL     group by schedule_id order by schedule_id"
+		sql "select * from schedule_file where complete_time IS NOT NULL order by schedule_id, complete_time" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
+	elif [[ $arg == --db-wipe  ]]; then
+		for i in $sql_tables; do echo -n "$i  	"; sql "delete from $i"; done
+		[[ -n $use_mongo ]] && mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
 	elif [[ $arg == --db-count ]]; then
-		sql_counts=$(for i in schedule s3data metadata; do echo $i:$(sql_sh "select count(*) from $i");done); [[ -z $sql_counts ]] && die Could not count DB
-		mongo_counts=$(mongo_js "print(db.s3.count() + ' ' + db.meta.count());"); [[ -z $mongo_counts ]] && die Bad mongo count
-		log SQL: $sql_counts MONGO: s3: ${mongo_counts/ / meta: } total: $(( ${mongo_counts/ /+} ))
+		sql_counts=$(for i in $sql_tables; do echo $i:$(sql_sh "select count(*) from $i");done); [[ -z $sql_counts ]] && die Could not count DB
+		m_out=;if [[ -n $use_mongo ]]; then m_out=$(mongo_js "print(db.s3.count(), db.meta.count());"); [[ -z $m_out ]] && die Bad mongo count; m_out="MONGO s3:${m_out% *} meta:${m_out#* } total: $(( ${m_out/ /+} ))"; fi
+		log SQL: $sql_counts $m_out
 	elif [[ $arg == --db-index ]]; then
+		[[ -n $use_mongo ]] || die Mongo not enabled: use_mongo=$use_mongo
 		mongo_js 'print(JSON.stringify(db.s3.createIndex({fileLocation:1}), null, 8),JSON.stringify(db.meta.createIndex({fileLocation:1,language:1}), null, 8))'
 		# colls_js='var colls=["s3","meta"];' for_colls_js="$colls_js"'for(len=colls.length, i=0; i<len; i++)'
 		# mongo_js "$for_colls_js"'{print(JSON.stringify(db[colls[i]].getIndexes(), null, 8))}'

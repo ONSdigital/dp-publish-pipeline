@@ -42,7 +42,7 @@ func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
 	if err != nil {
 		log.Printf("Error : %s", err.Error())
 	} else {
-		log.Printf("Added S3 : %s", dataSet.FileLocation)
+		log.Printf("Job %d Collection %q Added S3 : %s", dataSet.ScheduleId, dataSet.CollectionId, dataSet.FileLocation)
 		results.Close()
 	}
 }
@@ -55,13 +55,13 @@ func addMetadata(dataSet kafka.FileCompleteMessage, meta *sql.Stmt) {
 	if err != nil {
 		log.Printf("Error : %s", err.Error())
 	} else {
-		log.Printf("Added metadata : %s", dataSet.FileLocation)
+		log.Printf("Job %d Collection %q Added metadata : %s", dataSet.ScheduleId, dataSet.CollectionId, dataSet.FileLocation)
 		results.Close()
 	}
 }
 
 func getLanguage(uri string) string {
-	if strings.Contains(uri, "data_cy.json") {
+	if strings.HasSuffix(uri, "data_cy.json") {
 		return "cy"
 	}
 	return "en"
@@ -77,7 +77,7 @@ func getLanguage(uri string) string {
 //  timeseries/mmg/hhh/data.json => /timeseries/mmg/hhh
 //  trade/report/938438.json     => /trade/report/938438 (Special case for charts)
 func resloveURI(uri string) string {
-	if strings.HasSuffix(uri, "data.json") || strings.Contains(uri, "data_cy.json") {
+	if strings.HasSuffix(uri, "data.json") || strings.HasSuffix(uri, "data_cy.json") {
 		if uri == "data.json" {
 			return "/"
 		}

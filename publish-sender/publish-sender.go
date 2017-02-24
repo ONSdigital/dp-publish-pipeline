@@ -23,18 +23,18 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 		return
 	}
 	if strings.HasSuffix(message.FileLocation, ".json") {
-		file := filepath.Join(zebedeeRoot, "collections", message.CollectionId, "complete", message.FileLocation)
+		file := filepath.Join(zebedeeRoot, "collections", message.CollectionPath, "complete", message.FileLocation)
 		content, decryptErr := decrypt.DecryptFile(file, message.EncryptionKey)
 		if decryptErr != nil {
-			log.Printf("Collection %q - Failed to decrypt the following file : %s", message.CollectionId, file)
+			log.Printf("Job %d Collection %q - Failed to decrypt file %d: %q", message.ScheduleId, message.CollectionId, message.FileId, file)
 			return
 		}
 
-		data, _ := json.Marshal(kafka.FileCompleteMessage{FileLocation: message.FileLocation, FileContent: string(content), CollectionId: message.CollectionId})
+		data, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, FileLocation: message.FileLocation, FileContent: string(content), CollectionId: message.CollectionId})
 		fileProducer.Output <- data
-		data, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileLocation: message.FileLocation, CollectionId: message.CollectionId})
+		data, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, FileLocation: message.FileLocation, CollectionId: message.CollectionId})
 		flagProducer.Output <- data
-		log.Printf("Collection %q - uri %s", message.CollectionId, message.FileLocation)
+		log.Printf("Job %d Collection %q - uri %s", message.ScheduleId, message.CollectionId, message.FileLocation)
 	}
 }
 

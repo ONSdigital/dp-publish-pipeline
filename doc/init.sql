@@ -1,13 +1,23 @@
 DROP TABLE IF EXISTS schedule;
+DROP TABLE IF EXISTS schedule_file;
 DROP TABLE IF EXISTS metadata;
 DROP TABLE IF EXISTS s3data;
 
-CREATE TABLE schedule ( schedule_id SERIAL PRIMARY KEY,
-    collection_id varchar(50) NOT NULL,
-    encryption_key varchar(50) NOT NULL,
-    schedule_time bigint NOT NULL,
-    start_time bigint,
-    complete_time bigint
+CREATE TABLE schedule (
+    schedule_id         SERIAL PRIMARY KEY,
+    collection_id       varchar(128) NOT NULL,
+    collection_path     varchar(128) NOT NULL,
+    encryption_key      varchar(50) NOT NULL,
+    schedule_time       bigint NOT NULL,
+    start_time          bigint,
+    complete_time       bigint
+);
+
+CREATE TABLE schedule_file (
+    schedule_file_id    SERIAL PRIMARY KEY,
+    schedule_id         int,
+    file_path           varchar(256) NOT NULL,
+    complete_time       bigint
 );
 
 -- The following table is used to store metadata which contains all uris from

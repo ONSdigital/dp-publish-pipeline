@@ -5,12 +5,12 @@
 **Publish** to topic:
  - "uk.gov.ons.dp.web.schedule"
   ```
-  action: "publish|cancel",
   collectionId: "<string>",
-  publishTime: <epoch>,
   encryptionKey: "<string>",
+  action: "publish|cancel",
+  scheduleTime: <epoch>,
   ```
-  - `publishTime` may be optional if `action` is `cancel` (i.e. do not publish)
+  - `scheduleTime` may be optional if `action` is `cancel` (i.e. do not publish)
   - `action:"cancel"` is not yet supported
 
 ### Publish-scheduler
@@ -24,15 +24,12 @@ Then, at appropriate time...
 **Publish** to
  - topic "uk.gov.ons.dp.web.publish-file":
   ```
+  fileId: <integer>,
+  scheduleId: <integer>,
   collectionId: "<string>",
   encryptionKey: "<string>",
   fileLocation: "<string>",
   ```
- - topic "uk.gov.ons.dp.web.publish-count"
- ```
- collectionId: "<string>",
- fileCount: count,
- ```
 
 **Consume** topic "uk.gov.ons.dp.web.complete"
  - Update schedule as complete when this message is received
@@ -44,14 +41,17 @@ Then, at appropriate time...
 **Publish**
  - to topic "uk.gov.ons.dp.web.complete-file":
   ```
+  fileId: <integer>,
+  scheduleId: <integer>,
   collectionId: "<string>",
   fileLocation: "<string>",
   fileContent: "<data.json>",
   ```
  - to topic "uk.gov.ons.dp.web.complete-file-flag"
  ```
+ fileId: <integer>,
+ scheduleId: <integer>,
  collectionId: "<string>",
- fileLocation: "<string>",
  ```
 
 ### Static-content-migrator
@@ -62,6 +62,8 @@ Then, at appropriate time...
  - static content is decrypted and placed in an S3 bucket
  - to topic "uk.gov.ons.dp.web.complete-file":
   ```
+  fileId: <integer>,
+  scheduleId: <integer>,
   collectionId: "<string>",
   fileLocation: "<string>",
   s3Location: "<data.json>",
@@ -71,13 +73,13 @@ Then, at appropriate time...
 
 ### Publish-tracker
 
-**Consume** topics:
-- "uk.gov.ons.dp.web.publish-count"
+**Consume** topic:
 - "uk.gov.ons.dp.web.complete-file-flag"
 
 **Output**
 - "uk.gov.ons.dp.web.complete"
 ```
+scheduleId: <integer>,
 collectionId: "<string>",
 ```
 
