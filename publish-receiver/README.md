@@ -25,6 +25,7 @@ Test data examples for 'uk.gov.ons.dp.web.complete' topic
 * `zebedee_root` defaults to "."
 * `FILE_COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file"
 * `KAFKA_ADDR` defaults to "localhost:9092"
+* `MAX_CONCURRENT_FILE_COMPLETES` (default: 40) limit concurrent file-complete messages in progress
 
 #### Running a test environment
 

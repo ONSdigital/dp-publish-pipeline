@@ -4,12 +4,12 @@ A service which schedules and initiates release of Zebedee collections.
 
 Schedule messages are received via a kafka topic (see below). Examples of inbound messages:
 ```
-{"CollectionId":"test0002","EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==","ScheduleTime":"1234567890"}
+{"CollectionId":"test 0002","CollectionPath":"test0002", "EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "ScheduleTime":"1234567890"}
 ```
 
-Example of an output message:
+Example of an output 'publish-file' message:
 ```
-{"CollectionId":"test0002","FileLocation":"/peoplepopulationandcommunity/2015-02-26/1c560659.png","s3Location":"s3://content/peoplepopulationandcommunity/2015-02-26/1c560659.png"}
+{"ScheduleId":33, "FileId":1234, "CollectionId":"test 0002", "CollectionPath":"test0002", "EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "FileLocation":"/peoplepopulationandcommunity/2015-02-26/1c560659.png"}
 ```
 
 ### Getting started
@@ -23,6 +23,9 @@ Example of an output message:
 * `PUBLISH_FILE_TOPIC` defaults to "uk.gov.ons.dp.web.publish-file"
 * `COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete"
 * `DB_ACCESS` defaults to "user=dp dbname=dp sslmode=disable"
+* `RESEND_AFTER_QUIET_SECONDS` defaults to 0 (seconds)
+  * if no files have been marked as complete in the last RESEND_AFTER_QUIET_SECONDS, a scheduled job will be resumed (i.e. incomplete files resent)
+  * resends are disable when the value is 0
 
 #### Installation
 

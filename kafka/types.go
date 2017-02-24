@@ -9,36 +9,39 @@ type PublishMessage struct {
 */
 
 type ScheduleMessage struct {
-	CollectionId  string
-	EncryptionKey string
-	ScheduleTime  string
+	CollectionId   string
+	CollectionPath string
+	EncryptionKey  string
+	ScheduleTime   string
 }
 
 type PublishFileMessage struct {
-	CollectionId  string
-	EncryptionKey string
-	FileLocation  string
-}
-
-type PublishTotalMessage struct {
-	CollectionId string
-	FileCount    int
+	ScheduleId     int64
+	FileId         int64
+	CollectionId   string
+	CollectionPath string
+	EncryptionKey  string
+	FileLocation   string
 }
 
 // S3Location and FileContent are mutually exclusive
 type FileCompleteMessage struct {
+	ScheduleId   int64
+	FileId       int64
 	CollectionId string
 	FileLocation string
 	S3Location   string
 	FileContent  string
 }
 
-// S3Location and FileContent are mutually exclusive
 type FileCompleteFlagMessage struct {
+	ScheduleId   int64
+	FileId       int64
 	CollectionId string
 	FileLocation string
 }
 
 type CollectionCompleteMessage struct {
+	ScheduleId   int64
 	CollectionId string
 }
