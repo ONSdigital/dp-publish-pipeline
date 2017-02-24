@@ -68,7 +68,7 @@ func getLanguage(uri string) string {
 }
 
 // Within the zebedee reader it builds the uri based of what it is given. Instead
-// of repeating this per HTTP request, mongo stores the URI the website expects
+// of repeating this per HTTP request, postgrese stores the URI the website expects
 // So the content-api does not need to build the uri each time.
 // Examples :
 //  File location                : URI
