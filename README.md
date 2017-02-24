@@ -8,6 +8,11 @@ See the following pages per service
 * [Publish-sender](publish-sender/README.md)
 * [Static-content-migrator](static-content-migrator/README.md)
 * [Publish-receiver](publish-receiver/README.md)
+* [Publish-search-indexer](Publish-search-indexer/README.md)
+
+### API
+* [Content-API](content-api/README.md)
+* [Generator-API](generator-api/README.md)
 
 ### Design
 ![alt Design](doc/design.png)
@@ -15,7 +20,20 @@ See the following pages per service
 ### Event messages
 See [Event Message](doc/Messages.md) for details on each topic and type of message sent
 
-### Test results for publishing
+### Latest test results (2017 February)
+Machines: AWS M4.large, M3.xlarge, M4.large
+
+#### AWS setup
+* M4.large : Kafka + postgres (For publish-scheduler)
+* M4.large : 32 content-migrator + 32 publish-senders
+* M3.xlarge : publish-receiver + postgres/mongodb
+
+#### Results
+| File count | Size   |  Time in Seconds   |
+|------------|--------|--------------------|
+| 16k         | 780MB  |  21 - 22          |
+
+### Test results for publishing (2016 December results)
 Machine: AWS M4.Large instance 2VCPU and 8GB Memory
 
 | File count | Size   |  Time in Seconds   |  IO mbs  | Network mbps |
@@ -30,12 +48,6 @@ Machine: AWS M4.Large instance 2VCPU and 8GB Memory
 * Network max usage 436 mbp out of 450 mbps. This only lasted for a second.
 * Both CPUs were at 100% utilisation when publishing the collection.
 * Ram usage was low 2-3 GB (Including cache)
-
-### Issues
-* Encrytion key between the zebedee and publish scheduler is exposed in the kafka topic. In other topics the encryption key is no longer important as its time to publish the collection to the website.
-*  Race condition when a collection is added to mongodb. Its possible someone may get a missing page because of missing resources during the publish time.
-* Current services do not take advantage of kafka groups.
-* Publish tracker and Publish scheduler are stateful and do not currently store it.
 
 ### Contributing
 

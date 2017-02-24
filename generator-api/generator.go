@@ -1,26 +1,22 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	_ "github.com/lib/pq"
 )
 
 type fileWriter func([]string) error
 
-const dataBase = "onswebsite"
-const metaCollection = "meta"
-
-const mongodbHost = "MONGODB"
-
 const xlsFormat = "xls"
 const csvFormat = "csv"
 
-var db *mgo.Database
+var db *sql.DB
+var findMetaDataStatement *sql.Stmt
 
 func generateFile(w http.ResponseWriter, r *http.Request) {
 	format, uri, err := findParams(r)
@@ -107,26 +103,39 @@ func findFilterParams(query *http.Request) DataFilter {
 }
 
 func loadPageData(uri string) ([]byte, error) {
-	var record Record
-	notFoundErr := db.C(metaCollection).Find(bson.M{"fileLocation": uri}).One(&record)
-	if notFoundErr != nil {
-		return nil, notFoundErr
+	results := findMetaDataStatement.QueryRow(uri + "?lang=en")
+	var content sql.NullString
+	err := results.Scan(&content)
+	if err != nil {
+		return nil, err
 	}
-	return []byte(record.FileContent), nil
+	return []byte(content.String), nil
 }
 
-func dialDb(dbHost string) (*mgo.Session, error) {
-	dbSession, err := mgo.Dial(dbHost)
-	return dbSession, err
+func dialDb(dbSource string) error {
+	postgresDb, err := sql.Open("postgres", dbSource)
+	db = postgresDb
+	findMetaDataSQL := "SELECT content FROM metadata WHERE uri = $1"
+	findMetaDataStatement = prepareSQLStatement(findMetaDataSQL, db)
+	return err
+}
+
+func prepareSQLStatement(sql string, db *sql.DB) *sql.Stmt {
+	statement, err := db.Prepare(sql)
+	if err != nil {
+		log.Panicf("Error: Could not prepare statement on database: %s", err.Error())
+	}
+	return statement
 }
 
 func main() {
-	dbSession, err := dialDb(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
+	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
+	err := dialDb(dbSource)
 	if err != nil {
 		panic(err)
 	}
-	defer dbSession.Close()
-	db = dbSession.DB(dataBase)
+	defer db.Close()
+	defer findMetaDataStatement.Close()
 
 	port := utils.GetEnvironmentVariable("PORT", "8092")
 	http.HandleFunc("/generator", generateFile)

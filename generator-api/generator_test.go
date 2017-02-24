@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -17,9 +17,9 @@ const localAddress = "http://localhost/generator"
 
 func TestTimeseriesCsvYear(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a url and param, test timeseries to csv with year filter", t, func() {
-			url := "/timeseries"
+			url := "/timeseries1"
 			AddTestData(url, loadTimeseries(timeseriesData))
 			param := "?uri=" + url + "&frequency=years&format=csv&fromYear=1988&toYear=2000"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
@@ -40,9 +40,9 @@ func TestTimeseriesCsvYear(t *testing.T) {
 
 func TestTimeseriesCsvQuarter(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a url and param, test timeseries to csv with quarter filter", t, func() {
-			url := "/timeseries"
+			url := "/timeseries2"
 			AddTestData(url, loadTimeseries(timeseriesData))
 			param := "?uri=" + url + "&frequency=quarters&format=csv&fromYear=1988&toYear=2000&fromQuarter=q3&toQuarter=q2"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
@@ -61,11 +61,11 @@ func TestTimeseriesCsvQuarter(t *testing.T) {
 	}
 }
 
-func TestTimeseriesCsvMonth(t *testing.T) {
+func TesTimeseriesCsvMonth(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a url and param, test timeseries to csv with month filter", t, func() {
-			url := "/timeseries"
+			url := "/timeseries3"
 			AddTestData(url, loadTimeseries(timeseriesData))
 			param := "?uri=" + url + "&frequency=months&format=csv&fromYear=1988&toYear=2000&fromMonth=06&toMonth=11"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
@@ -86,9 +86,9 @@ func TestTimeseriesCsvMonth(t *testing.T) {
 
 func TestChartCsv(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a url and param, test chart to csv", t, func() {
-			url := "/chart"
+			url := "/chart1"
 			AddTestData(url, loadChart(chartData))
 			param := "?uri=" + url + "&format=csv"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
@@ -107,9 +107,9 @@ func TestChartCsv(t *testing.T) {
 
 func TestChartXls(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a url and param, test chart to xls", t, func() {
-			url := "/chart"
+			url := "/chart2"
 			AddTestData(url, loadChart(chartData))
 			param := "?uri=" + url + "&format=xls"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
@@ -126,9 +126,9 @@ func TestChartXls(t *testing.T) {
 
 func TestTimeseriesXls(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a url and param, test timeseries to xls", t, func() {
-			url := "/timeseries"
+			url := "/timeseries4"
 			AddTestData(url, loadTimeseries(timeseriesData))
 			param := "?uri=" + url + "&format=xls&frequency=months"
 			r, _ := http.NewRequest("GET", localAddress+param, nil)
@@ -145,14 +145,14 @@ func TestTimeseriesXls(t *testing.T) {
 
 func TestTimeseriesExport(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a url and param, test timeseries to csv with year filter", t, func() {
-			url := "/timeseries,/timeseries"
+			url := "/timeseries8"
 			AddTestData(url, loadTimeseries(timeseriesData))
 			param := "?uri=" + url + "&format=csv"
 			r, _ := http.NewRequest("POST", localAddress+param, nil)
 			r.ParseForm()
-			r.PostForm["uri"] = []string{"/timeseries", "/timeseries"}
+			r.PostForm["uri"] = []string{url, url}
 			r.PostForm["format"] = []string{"csv"}
 			w := httptest.NewRecorder()
 			exportFiles(w, r)
@@ -168,7 +168,7 @@ func TestTimeseriesExport(t *testing.T) {
 
 func TestUriNotFound(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a invalid url, 404 code is returned", t, func() {
 			url := "/notfound"
 			param := "?uri=" + url + "&format=xls&frequency=month"
@@ -184,7 +184,7 @@ func TestUriNotFound(t *testing.T) {
 
 func TestNoParameters(t *testing.T) {
 	t.Parallel()
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		Convey("with a no parameters, 400 code is returned", t, func() {
 			r, _ := http.NewRequest("GET", localAddress, nil)
 			w := httptest.NewRecorder()
@@ -197,17 +197,16 @@ func TestNoParameters(t *testing.T) {
 }
 
 func TestExtro(t *testing.T) {
-	if isMongodbAvailable() {
+	if isPostgresAvailable() {
 		DropTestData()
 	}
 }
 
-func isMongodbAvailable() bool {
-	session, err := dialDb(utils.GetEnvironmentVariable(mongodbHost, "localhost"))
+func isPostgresAvailable() bool {
+	err := dialDb("user=dp dbname=dp sslmode=disable")
 	if err != nil {
 		return false
 	}
-	db = session.DB(dataBase)
 	return true
 }
 
@@ -227,14 +226,26 @@ func loadChart(file string) []byte {
 	return data
 }
 
-func AddTestData(url string, data []byte) {
-	var record Record
-	record.CollectionId = "DataSet-456456"
-	record.FileLocation = url
-	record.FileContent = string(data)
-	db.C(metaCollection).Insert(record)
+func AddTestData(uri string, data []byte) {
+	insertMetaDataSQL := "INSERT INTO metadata(collection_id, uri, content) VALUES($1, $2, $3)"
+	insertMetaDataStatement := prepareSQLStatement(insertMetaDataSQL, db)
+	defer insertMetaDataStatement.Close()
+	result, err := insertMetaDataStatement.Query("test", uri+"?lang=en", string(data))
+	if err != nil {
+		log.Panicf("Failed to add test data. %s", err.Error())
+	} else {
+		result.Close()
+	}
 }
 
 func DropTestData() {
-	db.C(metaCollection).Remove(Record{CollectionId: "DataSet-456456"})
+	deleteMetaDataRowSQL := "DELETE from metadata where collection_id = $1"
+	deleteMetaDataRowStatement := prepareSQLStatement(deleteMetaDataRowSQL, db)
+	defer deleteMetaDataRowStatement.Close()
+	result, err := deleteMetaDataRowStatement.Query("test")
+	if err != nil {
+		log.Panicf("Failed to remove test data. %s", err.Error())
+	} else {
+		result.Close()
+	}
 }
