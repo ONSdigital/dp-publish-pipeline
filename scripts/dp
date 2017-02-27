@@ -63,7 +63,7 @@ export ZOOKEEPER=${ZOOKEEPER:-localhost:2181} KAFKA_ADDR=${KAFKA_ADDR:-localhost
 LOG_DIR=~/log
 KAFKA_TOPIC=${KAFKA_TOPIC:-uk.gov.ons.dp.web.schedule} sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
 KAFKA_PARTITIONS=${KAFKA_PARTITIONS:-12}
-SERVICES=${SERVICES:-publish-sender:$def_svc_num static-content-migrator:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
+SERVICES=${SERVICES:-publish-metadata:$def_svc_num publish-data:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
 sql_tables="schedule schedule_file s3data metadata"
 use_mongo=
 
@@ -103,7 +103,7 @@ while [[ -n $1 ]]; do
 		proc_re=
 		for s in $SERVICES; do
 			s=${s%:*}
-			proc_re=$proc_re${proc_re:+|}${s#static-}
+			proc_re=$proc_re${proc_re:+|}$s
 		done
 		log ${arg#--}... $proc_re
 		if   [[ $arg == --kill ]]; then
@@ -122,9 +122,9 @@ while [[ -n $1 ]]; do
 						test -f scheduler.log && grep 'start:' scheduler$ext				|sort -n |tail -2
 						test -f scheduler.log && grep 'completed' scheduler$ext				|sort -n |tail -2
 						test -f scheduler.log && grep 'ERROR' scheduler$ext				|sort -n |tail -2
-						test -f tracker.log   && grep Completed tracker$ext	|sort -n |tail -1
-						test -f sender.log    && tail -qn 1 sender*$ext					|sort -n |tail -1
-						test -f migrator.log  && tail -qn 1 migrator*$ext				|sort -n |tail -1
+						test -f tracker.log   && grep Completed tracker$ext				|sort -n |tail -1
+						test -f metadata.log  && tail -qn 1 metadata*$ext				|sort -n |tail -1
+						test -f data.log      && tail -qn 1 data*$ext					|sort -n |tail -1
 						test -f receiver.log  && tail -qn 20 receiver*$ext |grep Inserted		|sort -n |tail -1
 					)|sort -n
 	elif [[ $arg == --restart ]]; then set -- --kill --ps --rotate --up --sleep 1 --tail "$@"
@@ -205,11 +205,10 @@ while [[ -n $1 ]]; do
 			fi
 			sh=~/bin/run-$s.sh
 			if [[ -n $use_src ]]; then
-				kick_off $num "go run $s/${s#static-}.go"
+				kick_off $num "go run $s/$s.go"
 			elif [[ -x $sh ]]; then
 				kick_off $num $sh
 			else
-				s=${s#static-}
 				kick_off $num $s
 			fi
 		done

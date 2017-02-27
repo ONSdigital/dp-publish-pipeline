@@ -48,10 +48,10 @@ func main() {
 	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
 	regionName := utils.GetEnvironmentVariable("S3_REGION", "eu-west-1")
-	log.Printf("Starting Static Content Migrator from %q from %q to %q, %q", zebedeeRoot, consumeTopic, completeFileTopic, completeFileFlagTopic)
+	log.Printf("Starting Publish-Data from %q from %q to %q, %q", zebedeeRoot, consumeTopic, completeFileTopic, completeFileFlagTopic)
 	client := s3.CreateClient(bucketName)
 	client.CreateBucket(regionName)
-	consumer := kafka.NewConsumerGroup(consumeTopic, "content-migrator")
+	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-data")
 	completeFileProducer := kafka.NewProducer(completeFileTopic)
 	completeFileFlagProducer := kafka.NewProducer(completeFileFlagTopic)
 	for {

@@ -44,8 +44,8 @@ func main() {
 	completeFileTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 
-	log.Printf("Starting publish sender from %q to %q, %q", consumeTopic, completeFileTopic, completeFileFlagTopic)
-	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-sender")
+	log.Printf("Starting Publish-metadata from %q to %q, %q", consumeTopic, completeFileTopic, completeFileFlagTopic)
+	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-metadata")
 	fileProducer := kafka.NewProducer(completeFileTopic)
 	flagProducer := kafka.NewProducer(completeFileFlagTopic)
 	for {

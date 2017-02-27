@@ -5,8 +5,8 @@ dp-publish-pipeline
 See the following pages per service
 * [Publish-scheduler](publish-scheduler/README.md)
 * [Publish-tracker](publish-tracker/README.md)
-* [Publish-sender](publish-sender/README.md)
-* [Static-content-migrator](static-content-migrator/README.md)
+* [Publish-metadata](publish-metadata/README.md)
+* [Publish-data](publish-data/README.md)
 * [Publish-receiver](publish-receiver/README.md)
 * [Publish-search-indexer](Publish-search-indexer/README.md)
 
@@ -25,7 +25,7 @@ Machines: AWS M4.large, M3.xlarge, M4.large
 
 #### AWS setup
 * M4.large : Kafka + postgres (For publish-scheduler)
-* M4.large : 32 content-migrator + 32 publish-senders
+* M4.large : 32 publish-data + 32 publish-metadata
 * M3.xlarge : publish-receiver + postgres/mongodb
 
 #### Results

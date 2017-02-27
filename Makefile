@@ -1,4 +1,4 @@
-SERVICES?=receiver scheduler sender tracker migrator search-indexer
+SERVICES?=receiver scheduler metadata tracker data search-indexer
 UTILS?=decrypt kafka s3 utils
 
 export GOOS?=$(shell go env GOOS)
@@ -11,7 +11,7 @@ DATE:=$(shell date '+%Y%m%d-%H%M%S')
 # common function to translate SERVICES/UTILS arguments into $$dir and $$src:
 #   - $$dir/$$src.go exists if arg is in $(SERVICES) (generally add prefix 'publish-' to $$i)
 #   - $$dir = arg, if arg is in $(UTILS)
-SET_VARS=set_vars(){ local repo=$1; shift; if [[ " $(UTILS) " = *" $$i "* ]];then dir=$$i; src=na; return; fi; src=publish-$$i; dir=$$src; if [ $$i = migrator ]; then src=content-$$i; dir=static-$$src; fi; }
+SET_VARS=set_vars(){ local repo=$1; shift; if [[ " $(UTILS) " = *" $$i "* ]];then dir=$$i; src=na; return; fi; src=publish-$$i; dir=$$src; }
 
 build: test
 	@mkdir -p $(BUILD_ARCH) || exit 1; \
@@ -33,8 +33,7 @@ test:
 producer:
 	kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.schedule
 $(SERVICES):
-	@src=publish-$@; dir=$$src; if [ $@ = migrator ]; then src=content-$@; dir=static-$$src; fi; \
-	cd $$dir && go run $$src.go
+	@src=publish-$@; dir=$$src; cd $$dir && go run $$src.go
 
 # target AWS:                   make package GOOS=linux GOARCH=amd64
 # target AWS, build on Mac:     make package GOOS=linux

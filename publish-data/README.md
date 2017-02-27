@@ -1,6 +1,6 @@
-### static-content-migrator
+### publish-data
 
-A service which uploads static content from a Zebedee collection.
+A service which uploads static content (aka data, cf metadata) from a Zebedee collection.
 
 Messages are sent via a kafka topic. Example of messages:
 ```

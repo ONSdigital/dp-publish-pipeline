@@ -34,7 +34,7 @@ Then, at appropriate time...
 **Consume** topic "uk.gov.ons.dp.web.complete"
  - Update schedule as complete when this message is received
 
-### Publish-sender
+### Publish-metadata
 
 **Consume** topic "uk.gov.ons.dp.web.publish-file"
 
@@ -54,7 +54,7 @@ Then, at appropriate time...
  collectionId: "<string>",
  ```
 
-### Static-content-migrator
+### Publish-data
 
 **Consume** topic "uk.gov.ons.dp.web.publish-file"
 

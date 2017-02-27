@@ -1,6 +1,6 @@
-### Publish sender
+### Publish-metadata
 
-Decrypts metadata and pushes the data off to a publish receiver
+Decrypts metadata (JSON) and pushes the data off to a publish receiver
 
 #### Environment variables
 * CONSUME_TOPIC defaults to "uk.gov.ons.dp.web.publish-file"

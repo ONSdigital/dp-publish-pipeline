@@ -1,8 +1,8 @@
 .DS_STORE
 debug
-static-content-migrator/static-content-migrator
+publish-data/publish-data
 publish-receiver/publish-receiver
-publish-sender/publish-sender
+publish-metadata/publish-metadata
 content-api/content-api
 publish-search-indexer/publish-search-indexer
 generator-api/generator-api
