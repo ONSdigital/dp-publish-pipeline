@@ -1,15 +1,12 @@
-#!/bin/sh
+#!/bin/bash
 
 # Notes : This needs jq installed use `brew install jq`
 
 # A random name for the collection
 collectionName=$(uuidgen)
 
-# Send all messages to flourence which are then redirect to zebedee
-host="http://localhost:8081"
-
 # Json message used to create a collection
-read -r -d '' collectionJson <<- EOM
+read -r  -d '' collectionJson <<- EOM
     {
       "name":"$collectionName",
       "type":"manual",
@@ -24,7 +21,6 @@ EOM
 # Get args
 while [[ $# -gt 1 ]]; do
     key="$1"
-
     case $key in
         -d|--directory)
             DIRECTORY="$2"
@@ -33,6 +29,10 @@ while [[ $# -gt 1 ]]; do
         -t|--access_token)
             TOKEN="$2"
             shift # past argument
+            ;;
+        -h|--host)
+            HOST="$2"
+            shift
             ;;
         -z|--zebedee_root)
             ZEBEDEE_ROOT="$2"
@@ -53,24 +53,25 @@ filesToSend=$(find ${DIRECTORY} -type f)
 
 # Create collection
 echo "Creating Collection : $collectionName"
-#547e8b7c34e6954736d731fcbc6a729aafb2f029f665adf906c5df457cca39b4
-response=$(curl -sb -X POST --cookie "access_token=${TOKEN}" \
- $host"/zebedee/collection" -d "$collectionJson")
 
+response=$(curl -sb -X  POST --cookie "access_token=${TOKEN}" \
+ $HOST"/zebedee/collection" -d "$collectionJson" -k)
+
+echo $response
 # Find the collectionID in the json message. This is needed to add content
 # to the collection. (We also need to remove the quotes from the string)
 collectionID=$(echo $response | jq '.id')
-collectionID=${collectionID%"}
-collectionID=${collectionID#"}
+collectionID="${collectionID%\"}"
+collectionID="${collectionID#\"}"
 
 # Add content to the collection
 for file in ${filesToSend[@]}; do
   uri=${file/${DIRECTORY}/}
-  curlUri=$host"/zebedee/content/"$collectionID"?uri="$uri"&overwriteExisting=true&recursive=undefined"
+  curlUri=$HOST"/zebedee/content/"$collectionID"?uri="$uri"&overwriteExisting=true&recursive=undefined"
   if [[ $string != *".json" ]]; then
     curlUri=$curlUri"&validateJson=false"
   fi
-  fileAdded=$(curl -sb -X POST --cookie "access_token=${TOKEN}" $curlUri -d @$file)
+  fileAdded=$(curl -sb -X POST --cookie "access_token=${TOKEN}" $curlUri -d @$file -k)
   if [[ "$fileAdded" == "true" ]]; then
     echo "Added $uri to collection"
   else
