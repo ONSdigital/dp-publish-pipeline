@@ -4,7 +4,7 @@
 
 log() { echo $(date '+%Y-%m-%d %T') "$@"; }
 testing=
-max_running=20
+max_running=50
 
 # A random name for the collection
 collectionName=$(uuidgen)
@@ -50,21 +50,21 @@ while [[ $# -gt 1 ]]; do
             testing=1
             ;;
         *)
-            echo Bad arg: $key >&2
+            log Bad arg: $key >&2
             exit 2 # unknown option
             ;;
     esac
     shift # past argument or value
 done
-echo "Collection = $collectionName"
-echo "DIRECTORY  = $DIRECTORY"
-echo "Token      = $TOKEN"
+log "Collection = $collectionName"
+log "DIRECTORY  = $DIRECTORY"
+log "Token      = $TOKEN"
 
 # traverse collections
 filesToSend=$(find ${DIRECTORY} -type f)
 
 # Create collection
-echo "Creating Collection : $collectionName"
+log "Creating Collection : $collectionName"
 
 if [[ -z $testing ]]; then
   response=$(curl -sb -X  POST --cookie "access_token=${TOKEN}" \
@@ -89,7 +89,7 @@ for file in ${filesToSend[@]}; do
     curlUri=$curlUri"&validateJson=false"
   fi
   if (( running >= max_running )); then
-    wait -n; res=$?; let running--; [[ $res != 0 ]] && let error_count++
+    wait -n; res=$?; let running--; [[ $res != 0 ]] && let error_count++; log FATAL Aborting after error; break
   fi
   {
     if [[ -z $testing ]]; then
@@ -102,7 +102,7 @@ for file in ${filesToSend[@]}; do
       fi
     fi
     if [[ "$fileAdded" != "true" ]]; then
-      log "[$run_seq] Failed to add $uri to collection: $fileAdded"
+      log "ERROR [$run_seq] Failed to add $uri to collection: $fileAdded"
       exit 2
     fi
     log "[$run_seq] Added $uri to collection"
@@ -116,15 +116,15 @@ while (( running > 0 )); do
   let running--
 done
 
+if [[ $error_count -gt 0 ]]; then
+  log "FATAL Collection had $error_count errors - aborting"
+  exit $error_count
+fi
+
 inprogressDirectory=${ZEBEDEE_ROOT}"zebedee/collections/"${collectionID%-*}"/inprogress/*"
 completeDirectory=${ZEBEDEE_ROOT}"zebedee/collections/"${collectionID%-*}"/reviewed"
 if [[ -z $testing ]]; then
-  echo "Moving content to complete $completeDirectory"
+  log "Moving content to complete $completeDirectory"
   mv $inprogressDirectory $completeDirectory
 fi
-if [[ $error_count -gt 0 ]]; then
-  echo "Collection had $error_count errors"
-  exit $error_count
-else
-  echo "Collection ready to be approved"
-fi
+log "Collection ready to be approved"
