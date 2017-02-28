@@ -113,12 +113,16 @@ func main() {
 	producer := kafka.NewProducer(completeCollectionTopic)
 
 	rateLimitFileCompletes := make(chan bool, maxConcurrentFileCompletes)
-	tickerJobCompleteCheck := time.Tick(tick)
+
+	go func() {
+		tock := time.Tick(tick)
+		for _ = range tock {
+			checkForCompletedJobs(dbMeta, producer)
+		}
+	}()
 
 	for {
 		select {
-		case <-tickerJobCompleteCheck:
-			go checkForCompletedJobs(dbMeta, producer)
 		case consumerMessage := <-fileConsumer.Incoming:
 			rateLimitFileCompletes <- true
 			go func() {
