@@ -5,6 +5,7 @@
 log() { echo $(date '+%Y-%m-%d %T') "$@"; }
 testing=
 max_running=50
+max_errors=1
 
 # A random name for the collection
 collectionName=$(uuidgen)
@@ -89,7 +90,14 @@ for file in ${filesToSend[@]}; do
     curlUri=$curlUri"&validateJson=false"
   fi
   if (( running >= max_running )); then
-    wait -n; res=$?; let running--; [[ $res != 0 ]] && let error_count++; log FATAL Aborting after error; break
+    wait -n
+    res=$?
+    let running--
+    [[ $res != 0 ]] && let error_count++
+    if [[ $error_count -ge $max_errors ]]; then
+      log FATAL Aborting after $error_count errors: $res
+      break
+    fi
   fi
   {
     if [[ -z $testing ]]; then
@@ -127,4 +135,4 @@ if [[ -z $testing ]]; then
   log "Moving content to complete $completeDirectory"
   mv $inprogressDirectory $completeDirectory
 fi
-log "Collection ready to be approved"
+log "Collection ready to be approved - $error_count errors"
