@@ -2,9 +2,12 @@ package kafka
 
 /* PublishMessage is not used externally yet - message is within publish-scheduler
 type PublishMessage struct {
-	CollectionId  string
-	EncryptionKey string
-	Files         []string
+	ScheduleId     int64
+	CollectionId   string
+	CollectionPath string
+	EncryptionKey  string
+	ScheduleTime   int64
+	Files          []fileObj
 }
 */
 
