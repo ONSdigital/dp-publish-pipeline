@@ -22,22 +22,23 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, bucketName string, compl
 	if message.CollectionId == "" || message.EncryptionKey == "" || message.FileLocation == "" {
 		return fmt.Errorf("Malformed JSON: %q", jsonMessage)
 	}
-	if !strings.HasSuffix(message.FileLocation, ".json") {
-		s3Client := s3.CreateClient(bucketName)
-		path := filepath.Join(zebedeeRoot, "collections", message.CollectionPath, "complete", message.FileLocation)
-		content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
-		if decryptErr == nil {
-			s3Path := filepath.Join(uuid.NewV1().String(), message.CollectionPath, filepath.Base(message.FileLocation))
-			s3Client.AddObject(string(content), s3Path, message.CollectionId, message.ScheduleId)
-			fullS3Path := "s3://" + bucketName + "/" + s3Path
-			fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: fullS3Path})
-			completeFileProducer.Output <- fileComplete
-			fileComplete, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation})
-			completeFileFlagProducer.Output <- fileComplete
-		} else {
-			return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %s - error %s", message.ScheduleId, message.CollectionId, message.FileId, path, decryptErr)
-		}
+	if strings.HasSuffix(message.FileLocation, ".json") {
+		return nil
 	}
+	s3Client := s3.CreateClient(bucketName)
+	path := filepath.Join(zebedeeRoot, "collections", message.CollectionPath, "complete", message.FileLocation)
+	content, decryptErr := decrypt.DecryptFile(path, message.EncryptionKey)
+	if decryptErr != nil {
+		return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %s - error %s", message.ScheduleId, message.CollectionId, message.FileId, path, decryptErr)
+	}
+	s3Path := filepath.Join(uuid.NewV1().String(), message.CollectionPath, filepath.Base(message.FileLocation))
+	s3Client.AddObject(string(content), s3Path, message.CollectionId, message.ScheduleId)
+	fullS3Path := "s3://" + bucketName + "/" + s3Path
+	fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: fullS3Path})
+	completeFileProducer.Output <- fileComplete
+	fileComplete, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation})
+	completeFileFlagProducer.Output <- fileComplete
+
 	return nil
 }
 
