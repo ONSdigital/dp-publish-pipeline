@@ -10,3 +10,4 @@ generator-api/generator-api
 build
 .idea
 dp-publish-pipeline.iml
+dp-config

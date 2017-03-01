@@ -31,7 +31,9 @@ EOF
 	[[ -n $1 ]] && exit $1
 }
 
+psql_args="-U dp dp"
 os=$(uname -s)
+source dp-config
 if [[ $os == Darwin ]]; then # it's a dev mac
 	export ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-./test-data}
 	def_svc_num=${def_svc_num:-3}
@@ -47,14 +49,13 @@ else # aws
 	# the below line assumes you update the IP with: sudo vi /etc/hosts
 	export MONGODB=${MONGODB:-mongo:27017}
 	# add kafka commands to PATH
-	PATH=$PATH:/opt/kafka_2.10-0.10.1.0/bin
+	[[ -d /opt/kafka_2.10-0.10.1.0/bin ]] && PATH=$PATH:/opt/kafka_2.10-0.10.1.0/bin
 	[[ -d ~kafka ]] && start_kafka=1
 	k_ext=.sh
 	use_src=
 	p_flags=f
 	if [[ -n $DB_ACCESS ]]; then
-		psql_args=${DB_ACCESS%/*} # remove /dbname
-		psql_args="--host ${psql_args#*@}" # remove postgresql://user@
+		psql_args=$DB_ACCESS
 	fi
 fi
 export zebedee_root=$ZEBEDEE_ROOT KAFKA_MAX_BYTES=${KAFKA_MAX_BYTES:-10000000} MONGODB_DB=${MONGODB_DB:-onswebsite}
@@ -71,9 +72,8 @@ colr() { echo -e '\e[32m'"$@"'\e[0m'; }
 log()  { echo -e '\e[36m'$(date '+%Y-%m-%d %H:%M:%S')'\e[0m' "$@"; }
 warn() { log "$@" >&2; }
 die()  { warn "$@"; exit 2; }
-# sql()      { echo "$@" > $tmp_file.sql || die Cannot write to $tmp_file.sql; psql $psql_args -U dp dp -f $tmp_file.sql;      rm -f $tmp_file.sql; }
-sql()      { psql $psql_args -U dp dp -c "$@"; }
-sql_sh()   { psql $psql_args -U dp dp -t -c "$@"; }
+sql()      { psql $psql_args -c "$@"; }
+sql_sh()   { psql $psql_args -t -c "$@"; }
 mongo_js() { mongo $MONGODB/$MONGODB_DB --quiet --eval "$@"; }
 # mongo_js() { echo "$@" > $tmp_file.js  || die Cannot write to $tmp_file.js;  mongo $MONGODB/$MONGODB_DB --quiet $tmp_file.js; rm -f $tmp_file.js; }
 ensure_kafka() { ps -ef | grep -q ' java .* [k]afka' && return; warn No kafka - starting...; sudo -i -u kafka ~kafka/bin/start-kafka; }

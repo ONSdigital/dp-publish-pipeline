@@ -1,5 +1,10 @@
-SERVICES?=receiver scheduler metadata tracker data search-indexer
+SERVICES?=publish-receiver publish-scheduler publish-metadata publish-tracker publish-data \
+    content-api generator-api publish-search-indexer
 UTILS?=decrypt kafka s3 utils
+PACKABLE_BIN=scripts/dp
+PACKABLE_ETC=doc/init.sql
+REMOTE_BIN=bin
+REMOTE_ETC=etc
 
 export GOOS?=$(shell go env GOOS)
 export GOARCH?=$(shell go env GOARCH)
@@ -7,37 +12,40 @@ export GOARCH?=$(shell go env GOARCH)
 BUILD=build
 BUILD_ARCH=$(BUILD)/$(GOOS)-$(GOARCH)
 DATE:=$(shell date '+%Y%m%d-%H%M%S')
-
-# common function to translate SERVICES/UTILS arguments into $$dir and $$src:
-#   - $$dir/$$src.go exists if arg is in $(SERVICES) (generally add prefix 'publish-' to $$i)
-#   - $$dir = arg, if arg is in $(UTILS)
-SET_VARS=set_vars(){ local repo=$1; shift; if [[ " $(UTILS) " = *" $$i "* ]];then dir=$$i; src=na; return; fi; src=publish-$$i; dir=$$src; }
+TGZ_FILE=publish-$(GOOS)-$(GOARCH)-$(DATE).tar.gz
 
 build: test
 	@mkdir -p $(BUILD_ARCH) || exit 1; \
-	$(SET_VARS); for i in $(SERVICES); do set_vars $$i; \
-		echo Building $$i; \
-		cd $$dir || exit 1; \
-		go build -o ../$(BUILD_ARCH)/$$src $$src.go || exit 1; \
+	for service in $(SERVICES); do \
+		echo Building $$service; \
+		cd $$service || exit 1; \
+		go build -o ../$(BUILD_ARCH)/$(REMOTE_BIN)/$$service || exit 1; \
 		cd - > /dev/null || exit 1; \
 	done
 
 test:
-	@$(SET_VARS); rc=0; for i in $(SERVICES) $(UTILS); do set_vars $$i; \
-		echo Testing $$i ...; \
-		cd $$dir || exit 1; \
+	@rc=0; for service in $(SERVICES) $(UTILS); do \
+		echo Testing $$service ...; \
+		cd $$service || exit 1; \
 		go test || rc=$?; \
 		cd - > /dev/null || exit 2; \
 	done; exit $$rc
 
+clean:
+	rm -r $(BUILD_ARCH)
+
 producer:
 	kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.schedule
 $(SERVICES):
-	@src=publish-$@; dir=$$src; cd $$dir && go run $$src.go
+	@cd $@ && echo go run $@.go
+all: $(SERVICES)
 
 # target AWS:                   make package GOOS=linux GOARCH=amd64
 # target AWS, build on Mac:     make package GOOS=linux
 package: build
-	tar -zcf publish-$(GOOS)-$(GOARCH)-$(DATE).tar.gz -C $(BUILD_ARCH) .
+	mkdir -p $(BUILD_ARCH)/$(REMOTE_ETC)
+	for i in $(PACKABLE_ETC); do cp -p $$i $(BUILD_ARCH)/$(REMOTE_ETC); done
+	for i in $(PACKABLE_BIN); do cp -p $$i $(BUILD_ARCH)/$(REMOTE_BIN); done
+	tar -zcf $(TGZ_FILE) -C $(BUILD_ARCH) .
 
-.PHONY: build package producer test
+.PHONY: build package producer test all
