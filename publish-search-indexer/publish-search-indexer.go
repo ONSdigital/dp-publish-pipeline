@@ -55,7 +55,8 @@ func main() {
 	log.Print("Creating elastic search client.")
 	searchClient, err := elastic.NewClient(
 		elastic.SetURL(elasticSearchNodes...),
-		elastic.SetMaxRetries(5))
+		elastic.SetMaxRetries(5),
+		elastic.SetSniff(false))
 	if err != nil {
 		log.Fatalf("An error occured creating the Elastic Search client: %+v", err)
 		return
