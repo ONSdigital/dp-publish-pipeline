@@ -1,5 +1,6 @@
 SERVICES?=publish-receiver publish-scheduler publish-metadata publish-tracker publish-data \
     content-api generator-api publish-search-indexer
+SKIP_SERVICES?=
 UTILS?=decrypt kafka s3 utils
 PACKABLE_BIN=scripts/dp
 PACKABLE_ETC=doc/init.sql
@@ -14,9 +15,10 @@ BUILD_ARCH=$(BUILD)/$(GOOS)-$(GOARCH)
 DATE:=$(shell date '+%Y%m%d-%H%M%S')
 TGZ_FILE=publish-$(GOOS)-$(GOARCH)-$(DATE).tar.gz
 
-build: test
+build:
 	@mkdir -p $(BUILD_ARCH) || exit 1; \
 	for service in $(SERVICES); do \
+		[[ " $(SKIP_SERVICES) " = *" $$service "* ]] && continue; \
 		echo Building $$service; \
 		cd $$service || exit 1; \
 		go build -o ../$(BUILD_ARCH)/$(REMOTE_BIN)/$$service || exit 1; \
@@ -25,6 +27,7 @@ build: test
 
 test:
 	@rc=0; for service in $(SERVICES) $(UTILS); do \
+		[[ " $(SKIP_SERVICES) " = *" $$service "* ]] && continue; \
 		echo Testing $$service ...; \
 		cd $$service || exit 1; \
 		go test || rc=$?; \
