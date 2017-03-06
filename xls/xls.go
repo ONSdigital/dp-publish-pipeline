@@ -29,7 +29,7 @@ func CreateXLSWorkbook(workSheetName string) XLSWorkbook {
 	wb.workbook = C.xlsNewWorkbook()
 	cworkSheetName := C.CString(workSheetName)
 	defer C.free(unsafe.Pointer(cworkSheetName))
-	wb.worksheet = C.xlsWorkbookSheet(unsafe.Pointer(wb.workbook), cworkSheetName)
+	wb.worksheet = C.xlsWorkbookSheet(wb.workbook, cworkSheetName)
 	return wb
 }
 
@@ -60,5 +60,5 @@ func (wb *XLSWorkbook) DumpToWriter(writer io.Writer) {
 }
 
 func (wb *XLSWorkbook) Close() {
-	C.xlsDeleteWorkbook(unsafe.Pointer(wb.workbook))
+	C.xlsDeleteWorkbook(wb.workbook)
 }
