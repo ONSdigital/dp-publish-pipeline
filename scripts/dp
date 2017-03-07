@@ -6,7 +6,8 @@ usage() {
 		--up		- start all the processes (default) (see --svc)
 		--ps		- list all running processes
 		--kill		- kill all running processes
-		--restart	- do these: --kill --ps --rotate --up --tail (see --svc)
+		--restart	- do these: --kill --ps-ok --rotate --up (see --svc)
+		--bounce	- do these: --restart --tail
 		--svc "a b:N c"	- list of services (--{up,restart}) (N = opt no. of procs)
 				  (currently: $SERVICES)
 
@@ -51,6 +52,8 @@ else # aws
 	# add kafka commands to PATH
 	[[ -d /opt/kafka_2.10-0.10.1.0/bin ]] && PATH=$PATH:/opt/kafka_2.10-0.10.1.0/bin
 	[[ -d ~kafka ]] && start_kafka=1
+	# try to ensure commands (e.g. dp, publish-scheduler, ...) are on PATH
+	which dp > /dev/null 2>&1 || PATH=$PATH:$HOME/bin
 	k_ext=.sh
 	use_src=
 	p_flags=f
@@ -100,7 +103,7 @@ while [[ -n $1 ]]; do
 	arg=$1; shift
 	if   [[ $arg == -h || $arg == --help ]]; then usage; break
 	elif [[ $arg == --svc     ]]; then SERVICES=$1; shift
-	elif [[ $arg == --kill || $arg == --ps ]]; then
+	elif [[ $arg == --kill || $arg == --ps || $arg == --ps-ok ]]; then
 		proc_re=
 		for s in $SERVICES; do
 			s=${s%:*}
@@ -111,8 +114,9 @@ while [[ -n $1 ]]; do
 			if [[ $os == Darwin ]]; then	pkill -x "$proc_re"
 			else				killall -r "^($proc_re)\$"
 			fi
-		elif [[ $arg == --ps   ]]; then
-			pgrep -${p_flags}lx "$proc_re"; res=$?
+		elif [[ $arg == --ps || $arg == --ps-ok ]]; then
+			pgrep -${p_flags}lx "$proc_re"; ps_res=$?
+			[[ $arg == --ps ]] && res=$ps_res
 		fi
 	elif [[ $arg == --sleep   ]]; then log Sleeping to let logfiles be created...; sleep $1; shift
 	elif [[ $arg == --tail    ]]; then log Tailing...; exec tail -f $LOG_DIR/*.log
@@ -126,9 +130,10 @@ while [[ -n $1 ]]; do
 						test -f tracker.log   && grep Completed tracker$ext				|sort -n |tail -1
 						test -f metadata.log  && tail -qn 1 metadata*$ext				|sort -n |tail -1
 						test -f data.log      && tail -qn 1 data*$ext					|sort -n |tail -1
-						test -f receiver.log  && tail -qn 20 receiver*$ext |grep Inserted		|sort -n |tail -1
+						test -f receiver.log  && tail -qn 15 receiver*$ext |egrep 'Added (S3|metadata)'	|sort -n |tail -1
 					)|sort -n
-	elif [[ $arg == --restart ]]; then set -- --kill --ps --rotate --up --sleep 1 --tail "$@"
+	elif [[ $arg == --bounce  ]]; then set -- --kill --ps-ok --rotate --up --sleep 1 --tail "$@"
+	elif [[ $arg == --restart ]]; then set -- --kill --ps-ok --rotate --up "$@"
 	elif [[ $arg == --rotate  ]]; then date=$(date '+%Y%m%d-%H%M%S'); log Logs get extension .$date; for i in $LOG_DIR/*.log; do mv $i $i.$date; done
 	elif [[ $arg == --seed    ]]; then
 		when=0 coll= end_coll= stagger=0
