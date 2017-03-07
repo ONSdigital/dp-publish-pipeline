@@ -34,6 +34,7 @@ Install and setup Postgresql:
  brew install postgresql
  createuser --pwprompt dp
  createdb -Odp dp
+ grant dp to postgres;     # in psql on AWS
  # create table in DB...
  psql -U dp dp -f doc/init.sql
 ```
