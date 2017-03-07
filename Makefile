@@ -7,7 +7,8 @@ PACKABLE_ETC=doc/init.sql
 REMOTE_BIN=bin
 REMOTE_ETC=etc
 ANSIBLE_ARGS?=
-ARCHIVE?=$$(make latest-archive)
+ARCHIVE?=$(shell make latest-archive)
+HASH?=$(shell make hash)
 
 S3_BUCKET?=dp-publish-content-test
 S3_RELEASE_FOLDER?=release
@@ -19,7 +20,7 @@ export GOARCH?=$(shell go env GOARCH)
 BUILD=build
 BUILD_ARCH=$(BUILD)/$(GOOS)-$(GOARCH)
 DATE:=$(shell date '+%Y%m%d-%H%M%S')
-TGZ_FILE=publish-$(GOOS)-$(GOARCH)-$(DATE).tar.gz
+TGZ_FILE=publish-$(GOOS)-$(GOARCH)-$(DATE)-$(HASH).tar.gz
 
 build:
 	@mkdir -p $(BUILD_ARCH) || exit 1; \
@@ -48,6 +49,9 @@ producer:
 $(SERVICES):
 	@cd $@ && echo go run $@.go
 all: $(SERVICES)
+
+hash:
+	@git rev-parse --short HEAD
 
 # target AWS:                   make package GOOS=linux GOARCH=amd64
 # target AWS, build on Mac:     make package GOOS=linux
