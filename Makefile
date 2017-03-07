@@ -7,7 +7,7 @@ PACKABLE_ETC=doc/init.sql
 REMOTE_BIN=bin
 REMOTE_ETC=etc
 ANSIBLE_ARGS?=
-ARCHIVE?=$(shell make latest-archive)
+ARCHIVE?=$(shell make GOOS=$(GOOS) GOARCH=$(GOARCH) latest-archive)
 HASH?=$(shell make hash)
 
 S3_BUCKET?=dp-publish-content-test
