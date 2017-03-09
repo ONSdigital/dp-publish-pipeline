@@ -2,7 +2,7 @@ SERVICES?=publish-receiver publish-scheduler publish-metadata publish-tracker pu
     content-api generator-api publish-search-indexer
 SKIP_SERVICES?=
 UTILS?=decrypt kafka s3 utils
-PACKABLE_BIN=scripts/dp
+PACKABLE_BIN=scripts/dp scripts/ennary
 PACKABLE_ETC=doc/init.sql
 REMOTE_BIN=bin
 REMOTE_ETC=etc
