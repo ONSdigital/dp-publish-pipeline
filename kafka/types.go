@@ -16,6 +16,7 @@ type ScheduleMessage struct {
 	CollectionPath string
 	EncryptionKey  string
 	ScheduleTime   string
+	UrisToDelete   []string
 }
 
 type PublishFileMessage struct {
@@ -25,6 +26,13 @@ type PublishFileMessage struct {
 	CollectionPath string
 	EncryptionKey  string
 	FileLocation   string
+}
+
+type PublishDeleteMessage struct {
+	ScheduleId     int64
+	DeleteId       int64
+	CollectionId   string
+	DeleteLocation string
 }
 
 // S3Location and FileContent are mutually exclusive

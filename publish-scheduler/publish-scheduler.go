@@ -34,6 +34,7 @@ type scheduleJob struct {
 	encryptionKey  string
 	scheduleTime   int64
 	files          []fileObj
+	urisToDelete   []fileObj
 }
 
 type fileObj struct {
@@ -57,7 +58,7 @@ func findCollectionFiles(zebedeeRoot, collectionPath string) ([]fileObj, error) 
 	return files, nil
 }
 
-func publishCollection(job scheduleJob, fileProducerChannel, totalProducerChannel chan []byte) {
+func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChannel, totalProducerChannel chan []byte) {
 	if job.collectionId == "" {
 		log.Panicf("Bad message: %v", job)
 	}
@@ -65,6 +66,7 @@ func publishCollection(job scheduleJob, fileProducerChannel, totalProducerChanne
 	var data []byte
 	var err error
 
+	// Send published files to the kafka topic
 	for i := 0; i < len(job.files); i++ {
 		if data, err = json.Marshal(kafka.PublishFileMessage{ScheduleId: job.scheduleId, FileId: job.files[i].fileId, CollectionId: job.collectionId, CollectionPath: job.collectionPath, EncryptionKey: job.encryptionKey, FileLocation: job.files[i].filePath}); err != nil {
 			log.Panic(err)
@@ -72,6 +74,17 @@ func publishCollection(job scheduleJob, fileProducerChannel, totalProducerChanne
 		fileProducerChannel <- data
 	}
 	log.Printf("Job %d Collection %q sent %d files", job.scheduleId, job.collectionId, len(job.files))
+
+	// Send published deletes to the kafka topic
+	for i := 0; i < len(job.urisToDelete); i++ {
+		if data, err = json.Marshal(kafka.PublishDeleteMessage{ScheduleId: job.scheduleId,
+			DeleteId:       job.urisToDelete[i].fileId,
+			DeleteLocation: job.urisToDelete[i].filePath}); err != nil {
+			log.Panic(err)
+		}
+		deleteProducerChannel <- data
+	}
+	log.Printf("Job %d Collection %q sent %d deletes", job.scheduleId, job.collectionId, len(job.urisToDelete))
 }
 
 func scheduleCollection(jsonMessage []byte, zebedeeRoot string, dbMeta dbMetaObj) {
@@ -86,7 +99,10 @@ func scheduleCollection(jsonMessage []byte, zebedeeRoot string, dbMeta dbMetaObj
 			log.Panicf("Collection %q Cannot numeric convert: %q", message.CollectionId, message.ScheduleTime)
 		}
 		scheduleTime *= 1000 * 1000 * 1000 // convert from epoch (seconds) to epoch-nanoseconds (UnixNano)
-		newJob := scheduleJob{collectionId: message.CollectionId, collectionPath: message.CollectionPath, scheduleTime: scheduleTime, encryptionKey: message.EncryptionKey}
+		newJob := scheduleJob{collectionId: message.CollectionId,
+			collectionPath: message.CollectionPath,
+			scheduleTime:   scheduleTime,
+			encryptionKey:  message.EncryptionKey}
 
 		var files []fileObj
 		if files, err = findCollectionFiles(zebedeeRoot, message.CollectionPath); err != nil {
@@ -95,8 +111,17 @@ func scheduleCollection(jsonMessage []byte, zebedeeRoot string, dbMeta dbMetaObj
 		newJob.files = make([]fileObj, len(files))
 		copy(newJob.files, files)
 
+		log.Printf("%+v", message.UrisToDelete)
+		var deletes []fileObj
+		for i := 0; i < len(message.UrisToDelete); i++ {
+			log.Println(message.UrisToDelete[i])
+			deletes = append(deletes, fileObj{filePath: message.UrisToDelete[i]})
+		}
+		log.Printf("%+v", deletes)
+		newJob.urisToDelete = make([]fileObj, len(deletes))
+		copy(newJob.urisToDelete, deletes)
 		newJob.scheduleId = storeJob(dbMeta, &newJob)
-		log.Printf("Job %d Collection %q scheduled %d files", newJob.scheduleId, newJob.collectionId, len(newJob.files))
+		log.Printf("Job %d Collection %q scheduled %d files with %d deletes", newJob.scheduleId, newJob.collectionId, len(newJob.files), len(newJob.urisToDelete))
 	}
 }
 
@@ -130,8 +155,16 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 			log.Printf("Job %d Collection %q skip busy - this-tick: %d/%d", scheduleId.Int64, collectionId.String, launchedThisTick, maxLaunchPerTick)
 			continue
 		}
-		files := loadCollectionFiles(dbMeta, scheduleId.Int64)
-		jobToGo := scheduleJob{scheduleId: scheduleId.Int64, collectionId: collectionId.String, collectionPath: collectionPath.String, scheduleTime: scheduleTime.Int64, encryptionKey: encryptionKey.String, files: files}
+		files := loadDataFromDataBase(dbMeta, scheduleId.Int64, false)
+		deletes := loadDataFromDataBase(dbMeta, scheduleId.Int64, true)
+		log.Printf("delets : %d", len(deletes))
+		jobToGo := scheduleJob{scheduleId: scheduleId.Int64,
+			collectionId:   collectionId.String,
+			collectionPath: collectionPath.String,
+			scheduleTime:   scheduleTime.Int64,
+			encryptionKey:  encryptionKey.String,
+			files:          files,
+			urisToDelete:   deletes}
 		publishChannel <- jobToGo
 		launchedThisTick++
 		log.Printf("Job %d Collection %q launch#%d with %d files at time:%d", scheduleId.Int64, collectionId.String, launchedThisTick, len(files), epochTime)
@@ -141,8 +174,12 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 	}
 }
 
-func loadCollectionFiles(dbMeta dbMetaObj, scheduleId int64) []fileObj {
-	rows, err := dbMeta.prepped["load-incomplete-files"].Query(scheduleId)
+func loadDataFromDataBase(dbMeta dbMetaObj, scheduleId int64, loadDeletes bool) []fileObj {
+	sqlStmt := "load-incomplete-files"
+	if loadDeletes {
+		sqlStmt = "load-incomplete-deletes"
+	}
+	rows, err := dbMeta.prepped[sqlStmt].Query(scheduleId)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -163,17 +200,21 @@ func loadCollectionFiles(dbMeta dbMetaObj, scheduleId int64) []fileObj {
 	if err = rows.Err(); err != nil {
 		log.Panic(err)
 	}
-	log.Printf("Job %d Loaded %d files", scheduleId, len(files))
+	if loadDeletes {
+		log.Printf("Job %d Loaded %d deletes", scheduleId, len(files))
+	} else {
+		log.Printf("Job %d Loaded %d files", scheduleId, len(files))
+	}
 	return files
 }
 
 func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 	var (
-		txn               *sql.Tx
-		fileStmt, jobStmt *sql.Stmt
-		err               error
-		scheduleId        sql.NullInt64
-		fileId            int64
+		txn                           *sql.Tx
+		fileStmt, jobStmt, deleteStmt *sql.Stmt
+		err                           error
+		scheduleId                    sql.NullInt64
+		fileId                        int64
 	)
 
 	if txn, err = dbMeta.db.Begin(); err != nil {
@@ -185,6 +226,10 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 		log.Panic(err)
 	}
 	if fileStmt, err = txn.Prepare("INSERT INTO schedule_file (schedule_id, file_path) VALUES ($1, $2) RETURNING schedule_file_id"); err != nil {
+		txn.Rollback()
+		log.Panic(err)
+	}
+	if deleteStmt, err = txn.Prepare("INSERT INTO schedule_delete (schedule_id, delete_path) VALUES ($1, $2) RETURNING schedule_delete_id"); err != nil {
 		txn.Rollback()
 		log.Panic(err)
 	}
@@ -202,6 +247,15 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 			log.Panic(err)
 		}
 		(*jobObj).files[i].fileId = fileId
+	}
+
+	// insert files into schedule_file
+	for i := 0; i < len((*jobObj).urisToDelete); i++ {
+		if _, err = storeFile(deleteStmt, scheduleId.Int64, (*jobObj).urisToDelete[i].filePath); err != nil {
+			txn.Rollback()
+			log.Panic(err)
+		}
+		(*jobObj).urisToDelete[i].fileId = fileId
 	}
 
 	if err = txn.Commit(); err != nil {
@@ -237,6 +291,7 @@ func main() {
 
 	scheduleTopic := utils.GetEnvironmentVariable("SCHEDULE_TOPIC", "uk.gov.ons.dp.web.schedule")
 	produceFileTopic := utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
+	produceDeleteTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.publish-delete")
 	produceTotalTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 	restartGap, err := utils.GetEnvironmentVariableInt("RESEND_AFTER_QUIET_SECONDS", 0)
@@ -254,6 +309,7 @@ func main() {
 	}
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
 	dbMeta.prep("load-incomplete-files", "SELECT schedule_file_id, file_path FROM schedule_file WHERE schedule_id=$1 AND complete_time IS NULL")
+	dbMeta.prep("load-incomplete-deletes", "SELECT schedule_delete_id, delete_path FROM schedule_delete WHERE schedule_id=$1 AND complete_time IS NULL")
 	if restartGap == 0 {
 		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND start_time IS NULL AND schedule_time <= $1 RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path, encryption_key")
 	} else {
@@ -265,6 +321,7 @@ func main() {
 	totalProducer := kafka.NewProducer(produceTotalTopic)
 	scheduleConsumer := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
 	fileProducer := kafka.NewProducer(produceFileTopic)
+	deleteProducer := kafka.NewProducer(produceDeleteTopic)
 
 	publishChannel := make(chan scheduleJob)
 	exitChannel := make(chan bool)
@@ -283,7 +340,7 @@ func main() {
 				scheduleCollection(scheduleMessage.GetData(), zebedeeRoot, dbMeta)
 				scheduleMessage.Commit()
 			case publishMessage := <-publishChannel:
-				go publishCollection(publishMessage, fileProducer.Output, totalProducer.Output)
+				go publishCollection(publishMessage, fileProducer.Output, deleteProducer.Output, totalProducer.Output)
 			}
 		}
 	}()
