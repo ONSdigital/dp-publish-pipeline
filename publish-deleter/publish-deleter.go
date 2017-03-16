@@ -11,7 +11,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func publishDelete(jsonMessage []byte, deleteStatement *sql.Stmt) error {
+func publishDelete(jsonMessage []byte, deleteStatement *sql.Stmt, producer chan []byte) error {
 	var message kafka.PublishDeleteMessage
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
@@ -23,10 +23,11 @@ func publishDelete(jsonMessage []byte, deleteStatement *sql.Stmt) error {
 	}
 
 	log.Printf("Deleting content at %q from postgres from collection %q", message.DeleteLocation, message.CollectionId)
-	_, sqlErr := deleteStatement.Query(message.DeleteLocation + "?lang=en")
+	_, sqlErr := deleteStatement.Exec(message.DeleteLocation + "?lang=%")
 	if sqlErr != nil {
 		return sqlErr
 	}
+	producer <- jsonMessage
 	return nil
 }
 
@@ -37,7 +38,7 @@ func createPostgresConnection() (*sql.DB, error) {
 }
 
 func prepareSQLDeleteStatement(db *sql.DB) *sql.Stmt {
-	deleteContentSQL := "DELETE from metadata where uri = $1"
+	deleteContentSQL := "DELETE FROM metadata WHERE uri LIKE $1"
 	statement, err := db.Prepare(deleteContentSQL)
 	if err != nil {
 		log.Panicf("Error: Could not prepare statement on database: %s", err.Error())
@@ -46,7 +47,8 @@ func prepareSQLDeleteStatement(db *sql.DB) *sql.Stmt {
 }
 
 func main() {
-	consumerTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.delete-file")
+	consumerTopic := utils.GetEnvironmentVariable("DELETE_TOPIC", "uk.gov.ons.dp.web.delete-file")
+	producerTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	db, err := createPostgresConnection()
 	if err != nil {
 		log.Panicf("Database error : %s", err.Error())
@@ -56,10 +58,11 @@ func main() {
 	defer deleteStatement.Close()
 	log.Printf("Starting Publish-deletes")
 	consumer := kafka.NewConsumerGroup(consumerTopic, "publish-deletes")
+	producer := kafka.NewProducer(producerTopic)
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
-			if err := publishDelete(consumerMessage.GetData(), deleteStatement); err != nil {
+			if err := publishDelete(consumerMessage.GetData(), deleteStatement, producer.Output); err != nil {
 				log.Print(err)
 			} else {
 				consumerMessage.Commit()
