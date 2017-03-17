@@ -79,7 +79,8 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 	for i := 0; i < len(job.urisToDelete); i++ {
 		if data, err = json.Marshal(kafka.PublishDeleteMessage{ScheduleId: job.scheduleId,
 			DeleteId:       job.urisToDelete[i].fileId,
-			DeleteLocation: job.urisToDelete[i].filePath}); err != nil {
+			DeleteLocation: job.urisToDelete[i].filePath,
+			CollectionId:   job.collectionId}); err != nil {
 			log.Panic(err)
 		}
 		deleteProducerChannel <- data

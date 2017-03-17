@@ -47,7 +47,7 @@ func prepareSQLDeleteStatement(db *sql.DB) *sql.Stmt {
 }
 
 func main() {
-	consumerTopic := utils.GetEnvironmentVariable("DELETE_TOPIC", "uk.gov.ons.dp.web.delete-file")
+	consumerTopic := utils.GetEnvironmentVariable("DELETE_TOPIC", "uk.gov.ons.dp.web.publish-delete")
 	producerTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	db, err := createPostgresConnection()
 	if err != nil {
