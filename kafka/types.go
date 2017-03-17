@@ -45,11 +45,14 @@ type FileCompleteMessage struct {
 	FileContent  string
 }
 
+// (FileLocation, FileId) and (DeleteId,DeleteLocation) are mutually exclusive
 type FileCompleteFlagMessage struct {
-	ScheduleId   int64
-	FileId       int64
-	CollectionId string
-	FileLocation string
+	ScheduleId     int64
+	CollectionId   string
+	FileId         int64
+	FileLocation   string
+	DeleteId       int64
+	DeleteLocation string
 }
 
 type CollectionCompleteMessage struct {
