@@ -250,7 +250,7 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 		(*jobObj).files[i].fileId = fileId
 	}
 
-	// insert files into schedule_file
+	// insert deleted files into schedule_delete
 	for i := 0; i < len((*jobObj).urisToDelete); i++ {
 		if _, err = storeFile(deleteStmt, scheduleId.Int64, (*jobObj).urisToDelete[i].filePath); err != nil {
 			txn.Rollback()

@@ -22,7 +22,7 @@ CREATE TABLE schedule_file (
 );
 
 CREATE TABLE schedule_delete (
-    schedule_delete_id    SERIAL PRIMARY KEY,
+    schedule_delete_id  SERIAL PRIMARY KEY,
     schedule_id         int,
     delete_path         varchar(256) NOT NULL,
     complete_time       bigint

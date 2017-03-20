@@ -71,7 +71,7 @@ func markFileComplete(jsonMessage []byte, dbMeta dbMetaObj) {
 		log.Printf("Failed to parse json message")
 		return
 	}
-	if (file.ScheduleId == 0 || file.FileId == 0) && (file.ScheduleId == 0 || file.DeleteId == 0) {
+	if file.ScheduleId == 0 || (file.FileId == 0 && file.DeleteId == 0) {
 		log.Printf("Json message is missing fields : %s", string(jsonMessage))
 		return
 	}
@@ -113,7 +113,7 @@ func main() {
 		log.Panicf("Error: Could not establish a connection with the database: %s", err.Error())
 	}
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
-	dbMeta.prep("find-completed-jobs", "SELECT schedule.schedule_id, (SELECT count(*) FROM schedule_delete WHERE schedule.schedule_id = schedule_delete.schedule_id AND schedule_delete.complete_time IS NULL) AS deletes_remaining, (SELECT count(*) FROM schedule_file WHERE schedule.schedule_id = schedule_file.schedule_id AND schedule_file.complete_time IS NULL) AS filesRemaining FROM schedule WHERE complete_time is NULL GROUP BY schedule.schedule_id")
+	dbMeta.prep("find-completed-jobs", "SELECT schedule.schedule_id, (SELECT count(*) FROM schedule_delete WHERE schedule.schedule_id = schedule_delete.schedule_id AND schedule_delete.complete_time IS NULL) AS deletes_remaining, (SELECT count(*) FROM schedule_file WHERE schedule.schedule_id = schedule_file.schedule_id AND schedule_file.complete_time IS NULL) AS files_remaining FROM schedule WHERE complete_time is NULL GROUP BY schedule.schedule_id")
 	dbMeta.prep("update-completed-file", "UPDATE schedule_file SET complete_time=$2 WHERE schedule_file_id=$1")
 	dbMeta.prep("update-delete-file", "UPDATE schedule_delete SET complete_time=$2 WHERE schedule_delete_id=$1")
 	dbMeta.prep("update-complete-job", "UPDATE schedule SET complete_time=$2 WHERE schedule_id=$1 AND start_time IS NOT NULL AND complete_time IS NULL RETURNING collection_id, start_time")
