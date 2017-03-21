@@ -10,38 +10,39 @@ import (
 
 func TestInvalidJson(t *testing.T) {
 	t.Parallel()
-	db, err := createPostgresConnection()
-	if err == nil {
+	db, errPostgres := createPostgresConnection()
+	elasticClient, errElastic := createElasticSearchClient()
+	if errPostgres == nil || errElastic == nil {
 		defer db.Close()
 		deleteStmt := prepareSQLDeleteStatement(db)
 		defer deleteStmt.Close()
 		producerChannel := make(chan []byte, 1)
 		Convey("With a invalid json message, error code is returned", t, func() {
-			publishErr := publishDelete([]byte("{one: two"), deleteStmt, producerChannel)
+			publishErr := publishDelete([]byte("{one: two"), deleteStmt, elasticClient, producerChannel)
 			So(publishErr, ShouldNotBeNil)
 		})
 	} else {
-		log.Printf("Err : %s", err.Error())
-		t.Skip("Local postgres database was not found")
+		t.Skip("Local postgres database or elastic search was not found")
 	}
 }
 
 func TestMissinJsonParameters(t *testing.T) {
 	t.Parallel()
-	db, err := createPostgresConnection()
-	if err == nil {
+	db, errPostgres := createPostgresConnection()
+	elasticClient, errElastic := createElasticSearchClient()
+	if errPostgres == nil || errElastic == nil {
 		defer db.Close()
 		deleteStmt := prepareSQLDeleteStatement(db)
 		defer deleteStmt.Close()
 		producerChannel := make(chan []byte, 1)
 		Convey("With a missing json parameters, error code is returned", t, func() {
-			err := publishDelete([]byte("{\"CollectionId\":\"three\", \"ScheduleId\":0, \"DeleteId\":0 }"), deleteStmt, producerChannel)
+			err := publishDelete([]byte("{\"CollectionId\":\"three\", \"ScheduleId\":0, \"DeleteId\":0 }"), deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldNotBeNil)
-			err = publishDelete([]byte("{\"ScheduleId\":0, \"DeleteId\":0, \"DeleteLocation\": \"two\" }"), deleteStmt, producerChannel)
+			err = publishDelete([]byte("{\"ScheduleId\":0, \"DeleteId\":0, \"DeleteLocation\": \"two\" }"), deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldNotBeNil)
 		})
 	} else {
-		t.Skip("Local postgres database was not found")
+		t.Skip("Local postgres database or elastic search was not found")
 	}
 }
 
@@ -49,8 +50,9 @@ func TestMissinJsonParameters(t *testing.T) {
 // postgres or not.
 
 func TestRowIsRemovedFromPostgres(t *testing.T) {
-	db, err := createPostgresConnection()
-	if err == nil {
+	db, errPostgres := createPostgresConnection()
+	elasticClient, errElastic := createElasticSearchClient()
+	if errPostgres == nil || errElastic == nil {
 		defer db.Close()
 		deleteStmt := prepareSQLDeleteStatement(db)
 		defer deleteStmt.Close()
@@ -58,20 +60,21 @@ func TestRowIsRemovedFromPostgres(t *testing.T) {
 		Convey("With valid message, both english and welsh content is removed", t, func() {
 			So(AddTestData(db), ShouldBeNil)
 			message := []byte("{\"CollectionId\":\"123\", \"ScheduleId\":0, \"DeleteId\":0,\"DeleteLocation\": \"/aboutus\"}")
-			err := publishDelete(message, deleteStmt, producerChannel)
+			err := publishDelete(message, deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldBeNil)
 			rowsAffected, sqlErr := FindTestData(db)
 			So(sqlErr, ShouldBeNil)
 			So(rowsAffected, ShouldBeZeroValue)
 		})
 	} else {
-		t.Skip("Local postgres database was not found")
+		t.Skip("Local postgres database or elastic search was not found")
 	}
 }
 
 func TestProducerMessage(t *testing.T) {
-	db, err := createPostgresConnection()
-	if err == nil {
+	db, errPostgres := createPostgresConnection()
+	elasticClient, errElastic := createElasticSearchClient()
+	if errPostgres == nil || errElastic == nil {
 		defer db.Close()
 		deleteStmt := prepareSQLDeleteStatement(db)
 		defer deleteStmt.Close()
@@ -79,7 +82,7 @@ func TestProducerMessage(t *testing.T) {
 		Convey("With content succesfully removed, a complete message is sent ", t, func() {
 			So(AddTestData(db), ShouldBeNil)
 			message := []byte("{\"CollectionId\":\"123\", \"ScheduleId\":43, \"DeleteId\":34,\"DeleteLocation\": \"/aboutus\"}")
-			err := publishDelete(message, deleteStmt, producerChannel)
+			err := publishDelete(message, deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldBeNil)
 			kafkaMessage := string(<-producerChannel)
 			So(kafkaMessage, ShouldContainSubstring, "/aboutus")
@@ -88,7 +91,7 @@ func TestProducerMessage(t *testing.T) {
 			So(kafkaMessage, ShouldContainSubstring, "34")
 		})
 	} else {
-		t.Skip("Postgres database was not found")
+		t.Skip("Local postgres database or elastic search was not found")
 	}
 }
 
