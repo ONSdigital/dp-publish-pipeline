@@ -35,6 +35,8 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 			return fmt.Errorf("Unexpected bucket: wanted %s, for %s", bucketPrefix, message.FileLocation)
 		}
 		content, decryptErr = decrypt.DecryptS3(s3UpstreamClient, message.FileLocation[len(bucketPrefix):], message.EncryptionKey)
+	} else {
+		decryptErr = fmt.Errorf("Bad FileLocation")
 	}
 	if decryptErr != nil {
 		return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %q - %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, decryptErr)

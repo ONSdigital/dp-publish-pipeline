@@ -36,7 +36,7 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, s3UpstreamClient, s3Clie
 	} else if strings.HasPrefix(message.FileLocation, "file://") {
 		content, decryptErr = decrypt.DecryptFile(message.FileLocation[7:], message.EncryptionKey)
 	} else {
-		decryptErr = fmt.Errorf("Bad URI")
+		decryptErr = fmt.Errorf("Bad FileLocation")
 	}
 	if decryptErr != nil {
 		return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %s - error %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, decryptErr)
