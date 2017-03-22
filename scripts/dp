@@ -197,11 +197,15 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --reset ]]; then
 		log "Starting all-consuming consumer of $sched_group group for $KAFKA_TOPIC (Ctrl-C to quit)..."
 		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
-	elif [[ $arg == --db       ]]; then
+	elif [[ $arg == --db || $arg == --db-all ]]; then
 		sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
 		sql "select schedule_id, count(complete_time) AS num_complete   from schedule_file where complete_time IS NOT NULL group by schedule_id order by schedule_id"
 		sql "select schedule_id, count(complete_time) AS num_incomplete from schedule_file where complete_time IS NULL     group by schedule_id order by schedule_id"
 		sql "select * from schedule_file where complete_time IS NULL order by schedule_id,schedule_file_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
+		if [[ $arg == --db-all ]]; then
+			sql "select * from s3data"
+			sql "select * from metadata"
+		fi
 	elif [[ $arg == --db-wipe  ]]; then
 		for i in $sql_tables; do echo -n "$i  	"; sql "delete from $i"; done
 		[[ -n $use_mongo ]] && mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
