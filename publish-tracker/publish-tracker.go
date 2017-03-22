@@ -30,18 +30,20 @@ func checkForCompletedJobs(dbMeta dbMetaObj, producer kafka.Producer) {
 	}
 	defer rows.Close()
 
-	var scheduleId sql.NullInt64
+	var scheduleId, deletesRemaining, filesRemaining sql.NullInt64
 	completedTime := time.Now().UnixNano()
 
 	for rows.Next() {
-		if err := rows.Scan(&scheduleId); err != nil {
+		if err := rows.Scan(&scheduleId, &deletesRemaining, &filesRemaining); err != nil {
 			log.Panic(err)
 		}
-		duration, collectionId, err := markJobComplete(dbMeta, producer, scheduleId.Int64, completedTime)
-		if err != nil {
-			log.Printf("WARNING: %s", err)
-		} else {
-			log.Printf("Job %d Collection %q completes in %s", scheduleId.Int64, collectionId, duration)
+		if deletesRemaining.Int64 == 0 && filesRemaining.Int64 == 0 {
+			duration, collectionId, err := markJobComplete(dbMeta, producer, scheduleId.Int64, completedTime)
+			if err != nil {
+				log.Printf("WARNING: %s", err)
+			} else {
+				log.Printf("Job %d Collection %q completes in %s", scheduleId.Int64, collectionId, duration)
+			}
 		}
 	}
 }
@@ -69,13 +71,19 @@ func markFileComplete(jsonMessage []byte, dbMeta dbMetaObj) {
 		log.Printf("Failed to parse json message")
 		return
 	}
-	if file.ScheduleId == 0 || file.FileId == 0 {
+	if file.ScheduleId == 0 || (file.FileId == 0 && file.DeleteId == 0) {
 		log.Printf("Json message is missing fields : %s", string(jsonMessage))
 		return
 	}
-	//log.Printf("Updating %d", file.FileId)
-	if _, err := dbMeta.prepped["update-completed-file"].Exec(file.FileId, time.Now().UnixNano()); err != nil {
-		log.Panicf("Error: Could not update file %d : %s", file.FileId, err)
+
+	if file.FileId != 0 {
+		if _, err := dbMeta.prepped["update-completed-file"].Exec(file.FileId, time.Now().UnixNano()); err != nil {
+			log.Panicf("Error: Could not update file %d : %s", file.FileId, err)
+		}
+	} else if file.DeleteId != 0 {
+		if _, err := dbMeta.prepped["update-delete-file"].Exec(file.DeleteId, time.Now().UnixNano()); err != nil {
+			log.Panicf("Error: Could not update delete %d : %s", file.DeleteId, err)
+		}
 	}
 }
 
@@ -105,8 +113,9 @@ func main() {
 		log.Panicf("Error: Could not establish a connection with the database: %s", err.Error())
 	}
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
-	dbMeta.prep("find-completed-jobs", "SELECT schedule_id FROM schedule WHERE complete_time IS NULL AND start_time IS NOT NULL EXCEPT SELECT DISTINCT schedule_id FROM schedule_file WHERE complete_time IS NULL")
+	dbMeta.prep("find-completed-jobs", "SELECT schedule.schedule_id, (SELECT count(*) FROM schedule_delete WHERE schedule.schedule_id = schedule_delete.schedule_id AND schedule_delete.complete_time IS NULL) AS deletes_remaining, (SELECT count(*) FROM schedule_file WHERE schedule.schedule_id = schedule_file.schedule_id AND schedule_file.complete_time IS NULL) AS files_remaining FROM schedule WHERE complete_time is NULL GROUP BY schedule.schedule_id")
 	dbMeta.prep("update-completed-file", "UPDATE schedule_file SET complete_time=$2 WHERE schedule_file_id=$1")
+	dbMeta.prep("update-delete-file", "UPDATE schedule_delete SET complete_time=$2 WHERE schedule_delete_id=$1")
 	dbMeta.prep("update-complete-job", "UPDATE schedule SET complete_time=$2 WHERE schedule_id=$1 AND start_time IS NOT NULL AND complete_time IS NULL RETURNING collection_id, start_time")
 
 	fileConsumer := kafka.NewConsumerGroup(completeFileTopic, "publish-tracker")

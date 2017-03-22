@@ -1,5 +1,5 @@
 SERVICES?=publish-receiver publish-scheduler publish-metadata publish-tracker publish-data \
-    content-api generator-api publish-search-indexer
+    content-api generator-api publish-search-indexer publish-deleter
 SKIP_SERVICES?=
 UTILS?=decrypt kafka s3 utils
 PACKABLE_BIN=scripts/dp scripts/ennary
@@ -47,7 +47,7 @@ clean:
 producer:
 	kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.schedule
 $(SERVICES):
-	@cd $@ && echo go run $@.go
+	@cd $@ && go run $@.go
 all: $(SERVICES)
 
 hash:
@@ -72,4 +72,4 @@ deploy-archive:
 	archive=$(ARCHIVE); test -n "$$archive" && cd ../dp-setup/ansible && \
 	ansible-playbook $(ANSIBLE_ARGS) -i prototype_hosts prototype.yml -e "s3_bucket=$(S3_BUCKET) s3_archive_file=$(S3_RELEASE_FOLDER)/$$archive archive_file=$$archive"
 
-.PHONY: build package producer test all latest-archive deploy deploy-archive upload-build
+.PHONY: build package producer test all latest-archive deploy deploy-archive upload-build $(SERVICES)

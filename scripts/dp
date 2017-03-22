@@ -68,7 +68,7 @@ LOG_DIR=~/log
 KAFKA_TOPIC=${KAFKA_TOPIC:-uk.gov.ons.dp.web.schedule} sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
 KAFKA_PARTITIONS=${KAFKA_PARTITIONS:-12}
 SERVICES=${SERVICES:-publish-metadata:$def_svc_num publish-data:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
-sql_tables="schedule schedule_file s3data metadata"
+sql_tables="schedule schedule_file schedule_delete s3data metadata"
 use_mongo=
 
 colr_n() { local col=$1; shift; if [[ -t 0 ]]; then echo -e '\e['${col}m"$@"'\e[0m'; else echo "$@"; fi; }
@@ -135,8 +135,8 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --bounce  ]]; then set -- --kill --ps-ok --rotate --up --sleep 1 --tail "$@"
 	elif [[ $arg == --restart ]]; then set -- --kill --ps-ok --rotate --up "$@"
 	elif [[ $arg == --rotate  ]]; then date=$(date '+%Y%m%d-%H%M%S'); log Logs get extension .$date; for i in $LOG_DIR/*.log; do mv $i $i.$date; done
-	elif [[ $arg == --seed    ]]; then
-		when=0 coll= end_coll= stagger=0
+	elif [[ $arg == --seed || $arg == --s33d ]]; then
+		when=0 coll= end_coll= stagger=0 when_pp=now
 		while [[ -n $1 ]]; do
 			if [[ -z $coll ]]; then
 				coll=$1
@@ -160,16 +160,30 @@ while [[ -n $1 ]]; do
 		done
 		[[ -z $coll ]] && usage 1 >&2
 		shopt -s extglob # for the regexes in the for() (remove leading zeroes otherwise bash thinks it is octal)
-		count=0
+		count=0 count_all_files=
 		for (( c=${coll##test*(0)}; c <= ${end_coll##test*(0)}; c++ )); do
 			len=${#c} col=${coll:0:-len}$c       # get prefix of $coll removing length of $c (i.e. coll=test0009,c=10 so len=2 col=test0010)
 			# echo c=$c len=$len col=$col
 			key=$(awk '$1=="'"$col"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $col
-			echo '{"CollectionID":"'"Cn_$col"'","CollectionPath":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'"}'
+			files= files2del= filecount=0 coll_d=$ZEBEDEE_ROOT/collections/$col/complete
+			for i in $(cd $coll_d && find . -type f); do
+				i=${i#\.}
+				if [[ $i = /manifest.json ]]; then
+					files2del=$(jq .urisToDelete $coll_d$i)
+					[[ -n $files2del ]] && files2del=',"UrisToDelete":'"$files2del"
+					continue
+				fi
+				# files=$files${files:+,}'{"Location":"file://'"$coll_d$i"'","Uri":"'"$i"'"}'
+				files=$files${files:+,}'{"Location":"s3://upstream/'"$col$i"'","Uri":"'"$i"'"}'
+				let filecount++
+			done
+			echo '{"CollectionID":"'"CollId_$col"'","CollectionPath":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'","Files":['"$files"']'"$files2del"'}'
 			(( stagger > 0 )) && let when+=stagger
 			let count++
+			[[ -n $count_all_files ]] && count_all_files=$count_all_files,
+			count_all_files=$count_all_files${filecount}f
 		done
-		warn scheduled $(colr $count) jobs from $(colr $when_pp) ... then $stagger sec apart
+		warn scheduled $(colr $count) jobs $count_all_files from $(colr $when_pp) ... then $stagger sec apart
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
 	elif [[ $arg == -c ]]; then log Starting consumer... of $KAFKA_TOPIC; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $KAFKA_TOPIC
@@ -183,11 +197,15 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --reset ]]; then
 		log "Starting all-consuming consumer of $sched_group group for $KAFKA_TOPIC (Ctrl-C to quit)..."
 		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
-	elif [[ $arg == --db       ]]; then
+	elif [[ $arg == --db || $arg == --db-all ]]; then
 		sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
 		sql "select schedule_id, count(complete_time) AS num_complete   from schedule_file where complete_time IS NOT NULL group by schedule_id order by schedule_id"
 		sql "select schedule_id, count(complete_time) AS num_incomplete from schedule_file where complete_time IS NULL     group by schedule_id order by schedule_id"
 		sql "select * from schedule_file where complete_time IS NULL order by schedule_id,schedule_file_id" | perl -MTime::Piece -pE 's/(\d{13,})/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;'
+		if [[ $arg == --db-all ]]; then
+			sql "select * from s3data"
+			sql "select * from metadata"
+		fi
 	elif [[ $arg == --db-wipe  ]]; then
 		for i in $sql_tables; do echo -n "$i  	"; sql "delete from $i"; done
 		[[ -n $use_mongo ]] && mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
