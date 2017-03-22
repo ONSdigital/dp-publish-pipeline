@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
@@ -76,7 +75,7 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 	log.Printf("Job %d Collection %q sent %d deletes", job.scheduleId, job.collectionId, len(job.urisToDelete))
 }
 
-func scheduleCollection(jsonMessage []byte, zebedeeRoot string, dbMeta dbMetaObj) {
+func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 	var message kafka.ScheduleMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
@@ -278,10 +277,6 @@ func (dbMeta dbMetaObj) prep(tag, sql string) {
 }
 
 func main() {
-	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
-	if fileinfo, err := os.Stat(zebedeeRoot); err != nil || fileinfo.IsDir() == false {
-		log.Panicf("Cannot see directory %q", zebedeeRoot)
-	}
 
 	scheduleTopic := utils.GetEnvironmentVariable("SCHEDULE_TOPIC", "uk.gov.ons.dp.web.schedule")
 	produceFileTopic := utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
@@ -310,7 +305,7 @@ func main() {
 		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND schedule_time <= $1 AND (start_time IS NULL OR (start_time <= $2 AND NOT EXISTS(SELECT 1 FROM schedule_file sf WHERE s.schedule_id=sf.schedule_id AND sf.complete_time > $2))) RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path, encryption_key")
 	}
 
-	log.Printf("Starting publish scheduler from %q topics: %q -> %q/%q/%q", zebedeeRoot, scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic)
+	log.Printf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic)
 
 	totalProducer := kafka.NewProducer(produceTotalTopic)
 	scheduleConsumer := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
@@ -331,7 +326,7 @@ func main() {
 		for {
 			select {
 			case scheduleMessage := <-scheduleConsumer.Incoming:
-				scheduleCollection(scheduleMessage.GetData(), zebedeeRoot, dbMeta)
+				scheduleCollection(scheduleMessage.GetData(), dbMeta)
 				scheduleMessage.Commit()
 			case publishMessage := <-publishChannel:
 				go publishCollection(publishMessage, fileProducer.Output, deleteProducer.Output, totalProducer.Output)
