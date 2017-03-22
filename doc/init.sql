@@ -17,14 +17,15 @@ CREATE TABLE schedule (
 CREATE TABLE schedule_file (
     schedule_file_id    SERIAL PRIMARY KEY,
     schedule_id         int,
-    file_path           varchar(256) NOT NULL,
+    uri                 varchar(256) NOT NULL,
+    file_location       varchar(256) NOT NULL,
     complete_time       bigint
 );
 
 CREATE TABLE schedule_delete (
     schedule_delete_id  SERIAL PRIMARY KEY,
     schedule_id         int,
-    delete_path         varchar(256) NOT NULL,
+    uri                 varchar(256) NOT NULL,
     complete_time       bigint
 );
 

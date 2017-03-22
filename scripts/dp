@@ -135,8 +135,8 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --bounce  ]]; then set -- --kill --ps-ok --rotate --up --sleep 1 --tail "$@"
 	elif [[ $arg == --restart ]]; then set -- --kill --ps-ok --rotate --up "$@"
 	elif [[ $arg == --rotate  ]]; then date=$(date '+%Y%m%d-%H%M%S'); log Logs get extension .$date; for i in $LOG_DIR/*.log; do mv $i $i.$date; done
-	elif [[ $arg == --seed    ]]; then
-		when=0 coll= end_coll= stagger=0
+	elif [[ $arg == --seed || $arg == --s33d ]]; then
+		when=0 coll= end_coll= stagger=0 when_pp=now
 		while [[ -n $1 ]]; do
 			if [[ -z $coll ]]; then
 				coll=$1
@@ -160,16 +160,30 @@ while [[ -n $1 ]]; do
 		done
 		[[ -z $coll ]] && usage 1 >&2
 		shopt -s extglob # for the regexes in the for() (remove leading zeroes otherwise bash thinks it is octal)
-		count=0
+		count=0 count_all_files=
 		for (( c=${coll##test*(0)}; c <= ${end_coll##test*(0)}; c++ )); do
 			len=${#c} col=${coll:0:-len}$c       # get prefix of $coll removing length of $c (i.e. coll=test0009,c=10 so len=2 col=test0010)
 			# echo c=$c len=$len col=$col
 			key=$(awk '$1=="'"$col"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $col
-			echo '{"CollectionID":"'"Cn_$col"'","CollectionPath":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'"}'
+			files= files2del= filecount=0 coll_d=$ZEBEDEE_ROOT/collections/$col/complete
+			for i in $(cd $coll_d && find . -type f); do
+				i=${i#\.}
+				if [[ $i = /manifest.json ]]; then
+					files2del=$(jq .urisToDelete $coll_d$i)
+					[[ -n $files2del ]] && files2del=',"UrisToDelete":'"$files2del"
+					continue
+				fi
+				# files=$files${files:+,}'{"Location":"file://'"$coll_d$i"'","Uri":"'"$i"'"}'
+				files=$files${files:+,}'{"Location":"s3://upstream/'"$col$i"'","Uri":"'"$i"'"}'
+				let filecount++
+			done
+			echo '{"CollectionID":"'"CollId_$col"'","CollectionPath":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'","Files":['"$files"']'"$files2del"'}'
 			(( stagger > 0 )) && let when+=stagger
 			let count++
+			[[ -n $count_all_files ]] && count_all_files=$count_all_files,
+			count_all_files=$count_all_files${filecount}f
 		done
-		warn scheduled $(colr $count) jobs from $(colr $when_pp) ... then $stagger sec apart
+		warn scheduled $(colr $count) jobs $count_all_files from $(colr $when_pp) ... then $stagger sec apart
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
 	elif [[ $arg == -c ]]; then log Starting consumer... of $KAFKA_TOPIC; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $KAFKA_TOPIC

@@ -7,15 +7,23 @@ type PublishMessage struct {
 	CollectionPath string
 	EncryptionKey  string
 	ScheduleTime   int64
-	Files          []fileObj
+	Files          []FileResource
+	FilesToDelete  []FileResource
 }
 */
+
+type FileResource struct {
+	Id       int64  // in DB
+	Location string // e.g. "s3://..."
+	Uri      string // on website
+}
 
 type ScheduleMessage struct {
 	CollectionId   string
 	CollectionPath string
 	EncryptionKey  string
 	ScheduleTime   string
+	Files          []FileResource
 	UrisToDelete   []string
 }
 
