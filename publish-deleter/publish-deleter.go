@@ -20,17 +20,17 @@ func publishDelete(jsonMessage []byte, deleteStatement *sql.Stmt, elasticClient 
 		return err
 	}
 	log.Printf("%+v", message)
-	if message.CollectionId == "" || message.DeleteLocation == "" {
+	if message.CollectionId == "" || message.Uri == "" {
 		return errors.New("Missing json parameters")
 	}
 
-	log.Printf("Deleting content at %q from postgres from collection %q", message.DeleteLocation, message.CollectionId)
-	_, sqlErr := deleteStatement.Exec(message.DeleteLocation + "?lang=%")
+	log.Printf("Deleting content at %q from postgres from collection %q", message.Uri, message.CollectionId)
+	_, sqlErr := deleteStatement.Exec(message.Uri + "?lang=%")
 	if sqlErr != nil {
 		return sqlErr
 	}
 
-	elasticClient.DeleteByQuery("/ons/_all/_query?q=id:" + message.DeleteLocation).Do()
+	elasticClient.DeleteByQuery("/ons/_all/_query?q=id:" + message.Uri).Do()
 	producer <- jsonMessage
 	return nil
 }

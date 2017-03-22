@@ -34,13 +34,14 @@ type PublishFileMessage struct {
 	CollectionPath string
 	EncryptionKey  string
 	FileLocation   string
+	Uri            string
 }
 
 type PublishDeleteMessage struct {
-	ScheduleId     int64
-	DeleteId       int64
-	CollectionId   string
-	DeleteLocation string
+	ScheduleId   int64
+	DeleteId     int64
+	CollectionId string
+	Uri          string
 }
 
 // S3Location and FileContent are mutually exclusive
@@ -48,19 +49,18 @@ type FileCompleteMessage struct {
 	ScheduleId   int64
 	FileId       int64
 	CollectionId string
-	FileLocation string
+	Uri          string
 	S3Location   string
 	FileContent  string
 }
 
-// (FileLocation, FileId) and (DeleteId,DeleteLocation) are mutually exclusive
+// (FileId) and (DeleteId) are mutually exclusive
 type FileCompleteFlagMessage struct {
-	ScheduleId     int64
-	CollectionId   string
-	FileId         int64
-	FileLocation   string
-	DeleteId       int64
-	DeleteLocation string
+	ScheduleId   int64
+	CollectionId string
+	FileId       int64
+	Uri          string
+	DeleteId     int64
 }
 
 type CollectionCompleteMessage struct {

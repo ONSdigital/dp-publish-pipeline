@@ -18,7 +18,7 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 	if err != nil {
 		return fmt.Errorf("Failed to parse json message: %s", err)
 	}
-	if message.FileLocation == "" || message.EncryptionKey == "" || message.CollectionId == "" {
+	if message.FileLocation == "" || message.EncryptionKey == "" || message.CollectionId == "" || message.Uri == "" {
 		return fmt.Errorf("Json message missing fields: %s", string(jsonMessage))
 	}
 	if !strings.HasSuffix(message.FileLocation, ".json") {
@@ -40,9 +40,9 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 		return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %q - %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, decryptErr)
 	}
 
-	data, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, FileLocation: message.FileLocation, FileContent: string(content), CollectionId: message.CollectionId})
+	data, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, FileContent: string(content), CollectionId: message.CollectionId})
 	fileProducer.Output <- data
-	data, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, FileLocation: message.FileLocation, CollectionId: message.CollectionId})
+	data, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, CollectionId: message.CollectionId})
 	flagProducer.Output <- data
 
 	log.Printf("Job %d Collection %q - uri %s", message.ScheduleId, message.CollectionId, message.FileLocation)

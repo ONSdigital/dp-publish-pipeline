@@ -23,7 +23,7 @@ func storeData(jsonMessage []byte, s3 *sql.Stmt, meta *sql.Stmt) {
 		log.Printf("Failed to parse json message")
 		return
 	}
-	if dataSet.CollectionId == "" || dataSet.FileLocation == "" {
+	if dataSet.CollectionId == "" || dataSet.Uri == "" {
 		log.Printf("Unknown data from %v", dataSet)
 		return
 	}
@@ -35,27 +35,27 @@ func storeData(jsonMessage []byte, s3 *sql.Stmt, meta *sql.Stmt) {
 }
 
 func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
-	lang := getLanguage(dataSet.FileLocation)
+	lang := getLanguage(dataSet.Uri)
 	results, err := s3.Query(dataSet.CollectionId,
-		resloveURI(dataSet.FileLocation)+"?lang="+lang,
+		resloveURI(dataSet.Uri)+"?lang="+lang,
 		dataSet.S3Location)
 	if err != nil {
 		log.Printf("Error : %s", err.Error())
 	} else {
-		log.Printf("Job %d Collection %q Added S3 : %s", dataSet.ScheduleId, dataSet.CollectionId, dataSet.FileLocation)
+		log.Printf("Job %d Collection %q Added S3 : %s", dataSet.ScheduleId, dataSet.CollectionId, dataSet.Uri)
 		results.Close()
 	}
 }
 
 func addMetadata(dataSet kafka.FileCompleteMessage, meta *sql.Stmt) {
-	lang := getLanguage(dataSet.FileLocation)
+	lang := getLanguage(dataSet.Uri)
 	results, err := meta.Query(dataSet.CollectionId,
-		resloveURI(dataSet.FileLocation)+"?lang="+lang,
+		resloveURI(dataSet.Uri)+"?lang="+lang,
 		dataSet.FileContent)
 	if err != nil {
 		log.Printf("Error : %s", err.Error())
 	} else {
-		log.Printf("Job %d Collection %q Added metadata : %s", dataSet.ScheduleId, dataSet.CollectionId, dataSet.FileLocation)
+		log.Printf("Job %d Collection %q Added metadata : %s", dataSet.ScheduleId, dataSet.CollectionId, dataSet.Uri)
 		results.Close()
 	}
 }
@@ -77,14 +77,11 @@ func getLanguage(uri string) string {
 //  timeseries/mmg/hhh/data.json => /timeseries/mmg/hhh
 //  trade/report/938438.json     => /trade/report/938438 (Special case for charts)
 func resloveURI(uri string) string {
-	if strings.HasSuffix(uri, "data.json") || strings.HasSuffix(uri, "data_cy.json") {
-		if uri == "data.json" {
-			return "/"
-		}
-		webURI := "/" + filepath.Dir(uri)
+	if strings.HasSuffix(uri, "/data.json") || strings.HasSuffix(uri, "/data_cy.json") {
+		webURI := filepath.Dir(uri)
 		return webURI
 	} else if strings.HasSuffix(uri, ".json") {
-		return "/" + uri[:len(uri)-5]
+		return uri[:len(uri)-5]
 	}
 	return uri
 }

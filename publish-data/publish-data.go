@@ -19,7 +19,7 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, s3UpstreamClient, s3Clie
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		return fmt.Errorf("Invalid JSON: %q", jsonMessage)
 	}
-	if message.CollectionId == "" || message.EncryptionKey == "" || message.FileLocation == "" {
+	if message.CollectionId == "" || message.EncryptionKey == "" || message.FileLocation == "" || message.Uri == "" {
 		return fmt.Errorf("Malformed JSON: %q", jsonMessage)
 	}
 	if strings.HasSuffix(message.FileLocation, ".json") {
@@ -44,9 +44,9 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, s3UpstreamClient, s3Clie
 	s3Path := filepath.Join(uuid.NewV1().String(), message.CollectionPath, filepath.Base(message.FileLocation))
 	s3Client.AddObject(string(content), s3Path, message.CollectionId, message.ScheduleId)
 	fullS3Path := "s3://" + s3Client.Bucket + "/" + s3Path
-	fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation, S3Location: fullS3Path})
+	fileComplete, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, Uri: message.Uri, S3Location: fullS3Path})
 	completeFileProducer.Output <- fileComplete
-	fileComplete, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, FileLocation: message.FileLocation})
+	fileComplete, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, Uri: message.Uri})
 	completeFileFlagProducer.Output <- fileComplete
 
 	return nil

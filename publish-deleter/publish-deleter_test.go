@@ -38,7 +38,7 @@ func TestMissinJsonParameters(t *testing.T) {
 		Convey("With a missing json parameters, error code is returned", t, func() {
 			err := publishDelete([]byte("{\"CollectionId\":\"three\", \"ScheduleId\":0, \"DeleteId\":0 }"), deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldNotBeNil)
-			err = publishDelete([]byte("{\"ScheduleId\":0, \"DeleteId\":0, \"DeleteLocation\": \"two\" }"), deleteStmt, elasticClient, producerChannel)
+			err = publishDelete([]byte("{\"ScheduleId\":0, \"DeleteId\":0, \"Uri\": \"two\" }"), deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldNotBeNil)
 		})
 	} else {
@@ -59,7 +59,7 @@ func TestRowIsRemovedFromPostgres(t *testing.T) {
 		producerChannel := make(chan []byte, 1)
 		Convey("With valid message, both english and welsh content is removed", t, func() {
 			So(AddTestData(db), ShouldBeNil)
-			message := []byte("{\"CollectionId\":\"123\", \"ScheduleId\":0, \"DeleteId\":0,\"DeleteLocation\": \"/aboutus\"}")
+			message := []byte("{\"CollectionId\":\"123\", \"ScheduleId\":0, \"DeleteId\":0,\"Uri\": \"/aboutus\"}")
 			err := publishDelete(message, deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldBeNil)
 			rowsAffected, sqlErr := FindTestData(db)
@@ -81,7 +81,7 @@ func TestProducerMessage(t *testing.T) {
 		producerChannel := make(chan []byte, 1)
 		Convey("With content succesfully removed, a complete message is sent ", t, func() {
 			So(AddTestData(db), ShouldBeNil)
-			message := []byte("{\"CollectionId\":\"123\", \"ScheduleId\":43, \"DeleteId\":34,\"DeleteLocation\": \"/aboutus\"}")
+			message := []byte("{\"CollectionId\":\"123\", \"ScheduleId\":43, \"DeleteId\":34,\"Uri\": \"/aboutus\"}")
 			err := publishDelete(message, deleteStmt, elasticClient, producerChannel)
 			So(err, ShouldBeNil)
 			kafkaMessage := string(<-producerChannel)

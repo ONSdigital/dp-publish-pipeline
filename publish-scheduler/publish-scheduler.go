@@ -46,7 +46,15 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 
 	// Send published files to the kafka topic
 	for i := 0; i < len(job.files); i++ {
-		if data, err = json.Marshal(kafka.PublishFileMessage{ScheduleId: job.scheduleId, FileId: job.files[i].Id, CollectionId: job.collectionId, CollectionPath: job.collectionPath, EncryptionKey: job.encryptionKey, FileLocation: job.files[i].Location}); err != nil {
+		if data, err = json.Marshal(kafka.PublishFileMessage{
+			ScheduleId:     job.scheduleId,
+			FileId:         job.files[i].Id,
+			CollectionId:   job.collectionId,
+			CollectionPath: job.collectionPath,
+			EncryptionKey:  job.encryptionKey,
+			FileLocation:   job.files[i].Location,
+			Uri:            job.files[i].Uri,
+		}); err != nil {
 			log.Panic(err)
 		}
 		fileProducerChannel <- data
@@ -56,10 +64,10 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 	// Send published deletes to the kafka topic
 	for i := 0; i < len(job.urisToDelete); i++ {
 		if data, err = json.Marshal(kafka.PublishDeleteMessage{
-			ScheduleId:     job.scheduleId,
-			DeleteId:       job.urisToDelete[i].Id,
-			DeleteLocation: job.urisToDelete[i].Uri,
-			CollectionId:   job.collectionId,
+			ScheduleId:   job.scheduleId,
+			DeleteId:     job.urisToDelete[i].Id,
+			Uri:          job.urisToDelete[i].Uri,
+			CollectionId: job.collectionId,
 		}); err != nil {
 			log.Panic(err)
 		}
