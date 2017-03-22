@@ -68,7 +68,7 @@ LOG_DIR=~/log
 KAFKA_TOPIC=${KAFKA_TOPIC:-uk.gov.ons.dp.web.schedule} sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
 KAFKA_PARTITIONS=${KAFKA_PARTITIONS:-12}
 SERVICES=${SERVICES:-publish-metadata:$def_svc_num publish-data:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
-sql_tables="schedule schedule_file s3data metadata"
+sql_tables="schedule schedule_file schedule_delete s3data metadata"
 use_mongo=
 
 colr_n() { local col=$1; shift; if [[ -t 0 ]]; then echo -e '\e['${col}m"$@"'\e[0m'; else echo "$@"; fi; }
