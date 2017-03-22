@@ -19,6 +19,7 @@ type FileResource struct {
 }
 
 type ScheduleMessage struct {
+	Action         string
 	CollectionId   string
 	CollectionPath string
 	EncryptionKey  string

@@ -81,12 +81,17 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
 	} else if len(message.CollectionId) == 0 {
 		log.Panicf("Empty collectionId: %v", jsonMessage)
+	}
+
+	scheduleTime, err := strconv.ParseInt(message.ScheduleTime, 10, 64)
+	if err != nil {
+		log.Panicf("Collection %q Cannot numeric convert: %q", message.CollectionId, message.ScheduleTime)
+	}
+	scheduleTime *= 1000 * 1000 * 1000 // convert from epoch (seconds) to epoch-nanoseconds (UnixNano)
+
+	if message.Action == "cancel" {
+		cancelJob(dbMeta, message.CollectionId, scheduleTime)
 	} else {
-		scheduleTime, err := strconv.ParseInt(message.ScheduleTime, 10, 64)
-		if err != nil {
-			log.Panicf("Collection %q Cannot numeric convert: %q", message.CollectionId, message.ScheduleTime)
-		}
-		scheduleTime *= 1000 * 1000 * 1000 // convert from epoch (seconds) to epoch-nanoseconds (UnixNano)
 		newJob := scheduleJob{
 			collectionId:   message.CollectionId,
 			collectionPath: message.CollectionPath,
@@ -266,6 +271,68 @@ func storeFile(stmt *sql.Stmt, scheduleId int64, uri, location string) (int64, e
 		return 0, err
 	}
 	return fileId.Int64, nil
+}
+
+func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
+	var (
+		txn        *sql.Tx
+		jobStmt    *sql.Stmt
+		err        error
+		scheduleId sql.NullInt64
+	)
+
+	if txn, err = dbMeta.db.Begin(); err != nil {
+		log.Panic(err)
+	}
+
+	if jobStmt, err = txn.Prepare("DELETE FROM schedule WHERE collection_id=$1 AND schedule_time=$2 AND start_time IS NULL RETURNING schedule_id"); err != nil {
+		txn.Rollback()
+		log.Panic(err)
+	}
+
+	// delete job(s) from schedule
+	rows, err := jobStmt.Query(collectionId, scheduleTime)
+	if err != nil {
+		txn.Rollback()
+		log.Panic(err)
+	}
+
+	var scheduleIds []interface{}
+	placeholder := ""
+	for rows.Next() {
+		if err = rows.Scan(&scheduleId); err != nil {
+			txn.Rollback()
+			log.Panic(err)
+		}
+		scheduleIds = append(scheduleIds, scheduleId.Int64)
+		if len(placeholder) > 0 {
+			placeholder += ","
+		}
+		placeholder += "$" + strconv.Itoa(len(scheduleIds))
+	}
+
+	if len(scheduleIds) > 0 {
+		// delete files from schedule_file
+		if _, err := txn.Exec("DELETE FROM schedule_file WHERE schedule_id IN ("+placeholder+")", scheduleIds...); err != nil {
+			txn.Rollback()
+			log.Panicf("Cannot delete with schedule_id %d: %s", scheduleId.Int64, err)
+		}
+		// delete files from schedule_delete
+		if _, err := txn.Exec("DELETE FROM schedule_delete WHERE schedule_id IN ("+placeholder+")", scheduleIds...); err != nil {
+			txn.Rollback()
+			log.Panicf("Cannot delete with schedule_id %d: %s", scheduleId.Int64, err)
+		}
+
+		log.Printf("Jobs %v Collection %q at %d CANCELLED", scheduleIds, collectionId, scheduleTime)
+
+	} else {
+		log.Printf("Job ?? Collection %q at %d not found to cancel", collectionId, scheduleTime)
+	}
+
+	if err = txn.Commit(); err != nil {
+		txn.Rollback()
+		log.Panic(err)
+	}
 }
 
 func (dbMeta dbMetaObj) prep(tag, sql string) {
