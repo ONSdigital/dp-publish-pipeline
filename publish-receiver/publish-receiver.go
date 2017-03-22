@@ -37,7 +37,7 @@ func storeData(jsonMessage []byte, s3 *sql.Stmt, meta *sql.Stmt) {
 func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
 	lang := getLanguage(dataSet.Uri)
 	results, err := s3.Query(dataSet.CollectionId,
-		resloveURI(dataSet.Uri)+"?lang="+lang,
+		resolveURI(dataSet.Uri)+"?lang="+lang,
 		dataSet.S3Location)
 	if err != nil {
 		log.Printf("Error : %s", err.Error())
@@ -50,7 +50,7 @@ func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
 func addMetadata(dataSet kafka.FileCompleteMessage, meta *sql.Stmt) {
 	lang := getLanguage(dataSet.Uri)
 	results, err := meta.Query(dataSet.CollectionId,
-		resloveURI(dataSet.Uri)+"?lang="+lang,
+		resolveURI(dataSet.Uri)+"?lang="+lang,
 		dataSet.FileContent)
 	if err != nil {
 		log.Printf("Error : %s", err.Error())
@@ -76,7 +76,7 @@ func getLanguage(uri string) string {
 //  about/data.json              => /about
 //  timeseries/mmg/hhh/data.json => /timeseries/mmg/hhh
 //  trade/report/938438.json     => /trade/report/938438 (Special case for charts)
-func resloveURI(uri string) string {
+func resolveURI(uri string) string {
 	if strings.HasSuffix(uri, "/data.json") || strings.HasSuffix(uri, "/data_cy.json") {
 		webURI := filepath.Dir(uri)
 		return webURI
