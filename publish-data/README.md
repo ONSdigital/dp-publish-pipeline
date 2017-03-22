@@ -18,8 +18,14 @@ Example of a output message:
 * S3_URL defaults to localhost:4000
 * S3_ACCESS_KEY defaults to 1234
 * S3_SECRET_ACCESS_KEY defaults to 1234
-* KAFKA_ADDR defaults to localhost:9092
 * S3_BUCKET defaults to static_content
+
+* UPSTREAM_S3_URL defaults to localhost:4000 (UPSTREAM_* items represent where zebedee puts encrypted collections)
+* UPSTREAM_S3_ACCESS_KEY defaults to 1234
+* UPSTREAM_S3_SECRET_ACCESS_KEY defaults to 1234
+* UPSTREAM_S3_BUCKET defaults to `upstream-content`
+
+* KAFKA_ADDR defaults to localhost:9092
 * ZEBEDEE_ROOT defaults to ../test-data/
 * CONSUME_TOPIC defaults to uk.gov.ons.dp.web.publish-file
 * PRODUCE_TOPIC defaults to uk.gov.ons.dp.web.complete-file
