@@ -49,9 +49,14 @@ func main() {
 	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
 	regionName := utils.GetEnvironmentVariable("S3_REGION", "eu-west-1")
+	endpoint := utils.GetEnvironmentVariable("S3_URL", "localhost:4000")
+	accessKeyID := utils.GetEnvironmentVariable("S3_ACCESS_KEY", "1234")
+	secretAccessKey := utils.GetEnvironmentVariable("S3_SECRET_ACCESS_KEY", "1234")
+	s3Client := s3.CreateClient(bucketName, endpoint, accessKeyID, secretAccessKey, false)
+	s3Client.CreateBucket(regionName)
+
 	log.Printf("Starting Publish-Data from %q from %q to %q, %q", zebedeeRoot, consumeTopic, completeFileTopic, completeFileFlagTopic)
-	client := s3.CreateClient(bucketName)
-	client.CreateBucket(regionName)
+
 	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-data")
 	completeFileProducer := kafka.NewProducer(completeFileTopic)
 	completeFileFlagProducer := kafka.NewProducer(completeFileFlagTopic)
