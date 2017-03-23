@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strconv"
 	"time"
@@ -79,8 +80,8 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 	var message kafka.ScheduleMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.Panicf("Failed to parse json: %v", jsonMessage)
-	} else if len(message.CollectionId) == 0 {
-		log.Panicf("Empty collectionId: %v", jsonMessage)
+	} else if len(message.CollectionId) == 0 || message.Action == "" {
+		log.Panicf("Empty collectionId/action: %v", jsonMessage)
 	}
 
 	scheduleTime, err := strconv.ParseInt(message.ScheduleTime, 10, 64)
@@ -91,7 +92,7 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 
 	if message.Action == "cancel" {
 		cancelJob(dbMeta, message.CollectionId, scheduleTime)
-	} else {
+	} else if message.Action == "schedule" {
 		newJob := scheduleJob{
 			collectionId:   message.CollectionId,
 			collectionPath: message.CollectionPath,
@@ -106,18 +107,18 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 		newJob.files = make([]kafka.FileResource, len(files))
 		copy(newJob.files, files)
 
-		log.Printf("%+v", message.UrisToDelete)
 		var deletes []kafka.FileResource
 		for i := 0; i < len(message.UrisToDelete); i++ {
 			log.Println(message.UrisToDelete[i])
 			deletes = append(deletes, kafka.FileResource{Uri: message.UrisToDelete[i]})
 		}
-		log.Printf("%+v", deletes)
 		newJob.urisToDelete = make([]kafka.FileResource, len(deletes))
 		copy(newJob.urisToDelete, deletes)
 
 		newJob.scheduleId = storeJob(dbMeta, &newJob)
-		log.Printf("Job %d Collection %q scheduled %d files with %d deletes", newJob.scheduleId, newJob.collectionId, len(newJob.files), len(newJob.urisToDelete))
+		log.Printf("Job %d Collection %q scheduled: %d files, %d deletes", newJob.scheduleId, newJob.collectionId, len(newJob.files), len(newJob.urisToDelete))
+	} else {
+		log.Panicf("Collection %q No/invalid Action: %v", message.CollectionId, message)
 	}
 }
 
@@ -220,29 +221,24 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 	}
 
 	if jobStmt, err = txn.Prepare("INSERT INTO schedule (collection_id, collection_path, schedule_time, encryption_key, start_time, complete_time) VALUES ($1, $2, $3, $4, NULL, NULL) RETURNING schedule_id"); err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 	if fileStmt, err = txn.Prepare("INSERT INTO schedule_file (schedule_id, uri, file_location) VALUES ($1, $2, $3) RETURNING schedule_file_id"); err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 	if deleteStmt, err = txn.Prepare("INSERT INTO schedule_delete (schedule_id, uri) VALUES ($1, $2) RETURNING schedule_delete_id"); err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 
 	// insert job into schedule
 	res := jobStmt.QueryRow((*jobObj).collectionId, (*jobObj).collectionPath, (*jobObj).scheduleTime, (*jobObj).encryptionKey)
 	if err = res.Scan(&scheduleId); err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 	// insert files into schedule_file
 	for i := 0; i < len((*jobObj).files); i++ {
 		if fileId, err = storeFile(fileStmt, scheduleId.Int64, (*jobObj).files[i].Uri, (*jobObj).files[i].Location); err != nil {
-			txn.Rollback()
-			log.Panic(err)
+			rollbackAndError(txn, err)
 		}
 		(*jobObj).files[i].Id = fileId
 	}
@@ -250,15 +246,13 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 	// insert deleted files into schedule_delete
 	for i := 0; i < len((*jobObj).urisToDelete); i++ {
 		if _, err = storeFile(deleteStmt, scheduleId.Int64, (*jobObj).urisToDelete[i].Uri, ""); err != nil {
-			txn.Rollback()
-			log.Panic(err)
+			rollbackAndError(txn, err)
 		}
 		(*jobObj).urisToDelete[i].Id = fileId
 	}
 
 	if err = txn.Commit(); err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 
 	return scheduleId.Int64
@@ -271,6 +265,13 @@ func storeFile(stmt *sql.Stmt, scheduleId int64, uri, location string) (int64, e
 		return 0, err
 	}
 	return fileId.Int64, nil
+}
+
+func rollbackAndError(txn *sql.Tx, err error) {
+	if err2 := txn.Rollback(); err2 != nil {
+		log.Panicf("Error during rollback %s (while handling: %s)", err2, err)
+	}
+	log.Panic(err)
 }
 
 func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
@@ -286,23 +287,20 @@ func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
 	}
 
 	if jobStmt, err = txn.Prepare("DELETE FROM schedule WHERE collection_id=$1 AND schedule_time=$2 AND start_time IS NULL RETURNING schedule_id"); err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 
 	// delete job(s) from schedule
 	rows, err := jobStmt.Query(collectionId, scheduleTime)
 	if err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 
 	var scheduleIds []interface{}
 	placeholder := ""
 	for rows.Next() {
 		if err = rows.Scan(&scheduleId); err != nil {
-			txn.Rollback()
-			log.Panic(err)
+			rollbackAndError(txn, err)
 		}
 		scheduleIds = append(scheduleIds, scheduleId.Int64)
 		if len(placeholder) > 0 {
@@ -314,13 +312,11 @@ func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
 	if len(scheduleIds) > 0 {
 		// delete files from schedule_file
 		if _, err := txn.Exec("DELETE FROM schedule_file WHERE schedule_id IN ("+placeholder+")", scheduleIds...); err != nil {
-			txn.Rollback()
-			log.Panicf("Cannot delete with schedule_id %d: %s", scheduleId.Int64, err)
+			rollbackAndError(txn, fmt.Errorf("Jobs %v Collection %q Cannot delete files: %s", scheduleIds, collectionId, err))
 		}
 		// delete files from schedule_delete
 		if _, err := txn.Exec("DELETE FROM schedule_delete WHERE schedule_id IN ("+placeholder+")", scheduleIds...); err != nil {
-			txn.Rollback()
-			log.Panicf("Cannot delete with schedule_id %d: %s", scheduleId.Int64, err)
+			rollbackAndError(txn, fmt.Errorf("Jobs %v Collection %q Cannot delete file-deletes: %s", scheduleIds, collectionId, err))
 		}
 
 		log.Printf("Jobs %v Collection %q at %d CANCELLED", scheduleIds, collectionId, scheduleTime)
@@ -330,8 +326,7 @@ func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
 	}
 
 	if err = txn.Commit(); err != nil {
-		txn.Rollback()
-		log.Panic(err)
+		rollbackAndError(txn, err)
 	}
 }
 
