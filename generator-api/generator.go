@@ -25,14 +25,12 @@ func generateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := findFilterParams(r)
-	log.Printf("Got format : %s, uri: %s", format, uri)
 	data, err := loadPageData(uri)
 	if err != nil {
 		http.Error(w, "Content not found", http.StatusNotFound)
 		return
 	}
 	pageType := utils.GetType(data)
-	log.Printf("page Type : %s", pageType)
 	if pageType == "timeseries" {
 		generateTimeseries(data, filter, format, w)
 	} else if pageType == "chart" {
@@ -47,7 +45,6 @@ func exportFiles(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Exporting timeseries %+v as %s", r.PostForm["uri"], r.PostFormValue("format"))
 	format := r.PostFormValue("format")
 	uriList := r.PostForm["uri"]
-	log.Printf("Export request! format :  %s", format)
 	filter := findFilterParams(r)
 	for _, item := range uriList {
 		copydata(item, format, filter, w)
@@ -98,7 +95,6 @@ func findFilterParams(query *http.Request) DataFilter {
 	filter.Frequency = query.URL.Query().Get("frequency")
 	filter.FromQuarter = query.URL.Query().Get("fromQuarter")
 	filter.ToQuarter = query.URL.Query().Get("toQuarter")
-	log.Printf("Filter %+v", filter)
 	return filter
 }
 
@@ -138,6 +134,7 @@ func main() {
 	defer findMetaDataStatement.Close()
 
 	port := utils.GetEnvironmentVariable("PORT", "8092")
+	log.Printf("Starting Generator-API on port : %s", port)
 	http.HandleFunc("/generator", generateFile)
 	http.HandleFunc("/export", exportFiles)
 	http.ListenAndServe(":"+port, nil)
