@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/bsm/sarama-cluster"
-	"gopkg.in/olivere/elastic.v3"
+	"gopkg.in/olivere/elastic.v5"
 )
 
 type FileCompleteEvent struct {
@@ -39,10 +40,10 @@ type PageDescription struct {
 
 func main() {
 
-	kafkaBrokers := []string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}
+	kafkaBrokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 	kafkaConsumerTopic := utils.GetEnvironmentVariable("KAFKA_CONSUMER_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	kafkaConsumerGroup := utils.GetEnvironmentVariable("KAFKA_CONSUMER_GROUP", "uk.gov.ons.dp.web.complete-file.search-index")
-	elasticSearchNodes := []string{utils.GetEnvironmentVariable("ELASTIC_SEARCH_NODES", "http://127.0.0.1:9200")}
+	elasticSearchNodes := utils.GetEnvironmentVariableAsArray("ELASTIC_SEARCH_NODES", "http://127.0.0.1:9200")
 	elasticSearchIndex := utils.GetEnvironmentVariable("ELASTIC_SEARCH_INDEX", "ons")
 
 	log.Print("Environment variable values:")
@@ -68,9 +69,9 @@ func main() {
 		Workers(4).
 		FlushInterval(time.Millisecond * 1000).
 		After(after).
-		Do()
+		Do(context.Background())
 
-	bulk.Start()
+	bulk.Start(context.Background())
 	log.Printf("Creating Kafka consumer.")
 	consumerConfig := cluster.NewConfig()
 	kafkaConsumer, err := cluster.NewConsumer(kafkaBrokers, kafkaConsumerGroup, []string{kafkaConsumerTopic}, consumerConfig)
@@ -98,7 +99,6 @@ func main() {
 }
 
 func after(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
-	log.Printf("Start of after method")
 	if err != nil {
 		log.Printf("Failed to bulk upload documents : %s", err.Error())
 		if response != nil {
@@ -112,7 +112,6 @@ func after(executionId int64, requests []elastic.BulkableRequest, response *elas
 			}
 		}
 	}
-	log.Printf("End of after method")
 }
 
 func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elasticSearchIndex string) {

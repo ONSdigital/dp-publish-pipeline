@@ -3,9 +3,6 @@
 This service receives JSON messages containing new published pages for
 the ONS website.
 
-The ONS website is currently using Elastic Search version 2.4. As a result the elastic search client is restricted to version 3:
-https://github.com/olivere/elastic
-
 ### Configuration
 
 | Environment variable | Default                                        | Description
@@ -23,11 +20,14 @@ https://github.com/olivere/elastic
 * Start zookeeper and kafka `brew services start zookeeper && brew services start kafka`
 
 ##### Elastic search install via brew
-* Install Elastic Search `brew install elasticsearch@2.4`
+* Install Elastic Search `brew install elasticsearch@5.2`
 * Ensure the cluser.name property is set to `cluster.name: elasticsearch`.
 The configuration file can be found at `/usr/local/etc/elasticsearch/elasticsearch.yml`. For some reason it appended my username onto the end of the default clustername.
-* Start Elastic Search service `brew services start elasticsearch@2.4`
+* Start Elastic Search service `brew services start elasticsearch@5.2`
 * Run it `elasticsearch`
+
+##### Configure Elastic search
+* To create the ONS and department indexes run ```./createIndex.sh```
 
 ##### Elastic search via dp-compose
 The dp-compose project requires the native docker for mac (not docker toolbox)

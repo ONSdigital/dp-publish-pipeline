@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Page struct {
@@ -17,9 +18,16 @@ func GetEnvironmentVariable(name string, defaultValue string) string {
 	environmentValue := os.Getenv(name)
 	if environmentValue != "" {
 		return environmentValue
-	} else {
-		return defaultValue
 	}
+	return defaultValue
+}
+
+func GetEnvironmentVariableAsArray(name string, defaultValue string) []string {
+	environmentValue := os.Getenv(name)
+	if environmentValue != "" {
+		return strings.Split(environmentValue, ",")
+	}
+	return []string{defaultValue}
 }
 
 func GetEnvironmentVariableInt(name string, defaultValue int) (int, error) {
