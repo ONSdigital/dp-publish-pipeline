@@ -85,9 +85,9 @@
         },
         "filter": {
             "first_letter": {
-                "pattern": "^[^a-zA-Z]*(.).*",
-                "replacement": "$1",
-                "type": "pattern_replace"
+                "preserve_original": false,
+                "patterns" : ["^[^a-zA-Z]*([a-zA-Z]).*"],
+                "type": "pattern_capture"
             },
             "ons_synonyms": {
                 "synonyms": [
