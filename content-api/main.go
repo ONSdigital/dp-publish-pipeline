@@ -63,11 +63,21 @@ func main() {
 	defer findS3DataStatement.Close()
 
 	log.Printf("Starting Content API on port : %s", port)
+	// Babbage can use two different url types to call the content-api. One which
+	// only contains the endpoint type and another which extends the type and includes
+	// collectionID e.g /data/my-collection?param=list. As we don't need the collectionID
+	// both endpoints uses the same function handler.
+	http.HandleFunc("/data/", getData)
 	http.HandleFunc("/data", getData)
+	http.HandleFunc("/parent/", getParent)
 	http.HandleFunc("/parent", getParent)
+	http.HandleFunc("/resource/", getResource)
 	http.HandleFunc("/resource", getResource)
+	http.HandleFunc("/taxonomy/", getTaxonomy)
 	http.HandleFunc("/taxonomy", getTaxonomy)
+	http.HandleFunc("/generator/", generatorHandler)
 	http.HandleFunc("/generator", generatorHandler)
+	http.HandleFunc("/export/", exportHandler)
 	http.HandleFunc("/export", exportHandler)
 	http.ListenAndServe(":"+port, nil)
 }
