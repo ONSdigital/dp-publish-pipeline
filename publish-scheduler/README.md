@@ -2,14 +2,17 @@
 
 A service which schedules and initiates release of Zebedee collections.
 
-Schedule messages are received via a kafka topic (see below). Examples of inbound messages:
+Schedule messages are received via a kafka topic (see below). Example of inbound messages:
 ```
-{"CollectionId":"test 0002","CollectionPath":"test0002", "EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "ScheduleTime":"1234567890"}
+{"CollectionId":"test 0002","CollectionPath":"test0002", "EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "ScheduleTime":"1234567890",
+  "Files":[{"Uri":"/pop/foo.json","Location":"s3://bucket/test0002/pop/foo.json"},...],
+  "UrisToDelete":["/pop/bar.json"]
+}
 ```
 
 Example of an output 'publish-file' message:
 ```
-{"ScheduleId":33, "FileId":1234, "CollectionId":"test 0002", "CollectionPath":"test0002", "EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "FileLocation":"/peoplepopulationandcommunity/2015-02-26/1c560659.png"}
+{"ScheduleId":33, "FileId":1234, "CollectionId":"test 0002", "CollectionPath":"test0002", "EncryptionKey":"6y/+G0ZVPBBjtA5GOWj9Ow==", "FileLocation":"s3://bucket/test0002/peoplepopulationandcommunity/2015-02-26/1c560659.png"}
 ```
 
 ### Getting started

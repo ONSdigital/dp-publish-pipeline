@@ -1,5 +1,6 @@
 DROP TABLE IF EXISTS schedule;
 DROP TABLE IF EXISTS schedule_file;
+DROP TABLE IF EXISTS schedule_delete;
 DROP TABLE IF EXISTS metadata;
 DROP TABLE IF EXISTS s3data;
 
@@ -16,7 +17,15 @@ CREATE TABLE schedule (
 CREATE TABLE schedule_file (
     schedule_file_id    SERIAL PRIMARY KEY,
     schedule_id         int,
-    file_path           varchar(256) NOT NULL,
+    uri                 varchar(256) NOT NULL,
+    file_location       varchar(256) NOT NULL,
+    complete_time       bigint
+);
+
+CREATE TABLE schedule_delete (
+    schedule_delete_id  SERIAL PRIMARY KEY,
+    schedule_id         int,
+    uri                 varchar(256) NOT NULL,
     complete_time       bigint
 );
 

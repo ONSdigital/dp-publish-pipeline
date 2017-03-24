@@ -9,6 +9,8 @@
   encryptionKey: "<string>",
   action: "publish|cancel",
   scheduleTime: <epoch>,
+  files:[{uri:"<string>", location:"<string>"}, ...],
+  urisToDelete:["<string>", ...],
   ```
   - `scheduleTime` may be optional if `action` is `cancel` (i.e. do not publish)
   - `action:"cancel"` is not yet supported

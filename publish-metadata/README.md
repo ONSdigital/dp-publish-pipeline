@@ -7,6 +7,7 @@ Decrypts metadata (JSON) and pushes the data off to a publish receiver
 * PRODUCE_TOPIC defaults to "uk.gov.ons.dp.web.complete-file"
 * KAFKA_ADDR defaults to "localhost:9092"
 * ZEBEDEE_ROOT defaults to "../test-data/"
+* see [Publish-data](publish-data/README.md) for the list of S3 env vars
 
 #### Running a test environment
 * Install kafka server ```brew install kafka```

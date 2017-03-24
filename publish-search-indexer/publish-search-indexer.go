@@ -98,9 +98,12 @@ func main() {
 }
 
 func after(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+	log.Printf("Start of after method")
 	if err != nil {
 		log.Printf("Failed to bulk upload documents : %s", err.Error())
-		log.Printf("Number of documents failed : %d", len(response.Failed()))
+		if response != nil {
+			log.Printf("Number of documents failed : %d", len(response.Failed()))
+		}
 	} else {
 		log.Printf("Uploaded %d documents to the ONS index.", len(response.Succeeded()))
 		if response.Errors {
@@ -109,6 +112,7 @@ func after(executionId int64, requests []elastic.BulkableRequest, response *elas
 			}
 		}
 	}
+	log.Printf("End of after method")
 }
 
 func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elasticSearchIndex string) {
