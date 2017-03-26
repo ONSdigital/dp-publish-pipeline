@@ -238,7 +238,7 @@ while [[ -n $1 ]]; do
 			fi
 			sh=~/bin/run-$s.sh
 			if [[ -n $use_src ]]; then
-				kick_off $num "go run $s/$s.go"
+				kick_off $num "go run -race $s/$s.go"
 			elif [[ -x $sh ]]; then
 				kick_off $num $sh
 			else
