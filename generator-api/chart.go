@@ -1,4 +1,4 @@
-package main
+package generator
 
 import (
 	"encoding/csv"
@@ -33,10 +33,10 @@ type Chart struct {
 	} `json:"files"`
 }
 
-func generateChart(data []byte, format string, w http.ResponseWriter) {
+func GenerateChart(data []byte, format string, w http.ResponseWriter) {
 	var chart Chart
 	json.Unmarshal(data, &chart)
-	if format == csvFormat {
+	if IsCsv(format) {
 		utils.SetCSVContentHeader(w)
 		csvFile := csv.NewWriter(w)
 		chartToWriter(csvFile.Write, chart)

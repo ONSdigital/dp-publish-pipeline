@@ -1,4 +1,4 @@
-package main
+package generator
 
 import (
 	"encoding/csv"
@@ -67,7 +67,7 @@ type Record struct {
 	CollectionId string `json:"collectionId" bson:"collectionId"`
 }
 
-func generateTimeseries(data []byte, filter DataFilter, format string, w http.ResponseWriter) {
+func GenerateTimeseries(data []byte, filter DataFilter, format string, w http.ResponseWriter) {
 	var timeSeries TimeSeries
 	json.Unmarshal(data, &timeSeries)
 	if format == xlsFormat {
@@ -76,7 +76,7 @@ func generateTimeseries(data []byte, filter DataFilter, format string, w http.Re
 		defer xlsFile.Close()
 		timeSeriesToWriter(xlsFile.WriteRow, timeSeries, filter)
 		xlsFile.DumpToWriter(w)
-	} else if format == csvFormat {
+	} else if IsCsv(format) {
 		utils.SetCSVContentHeader(w)
 		csv := csv.NewWriter(w)
 		timeSeriesToWriter(csv.Write, timeSeries, filter)

@@ -1,4 +1,4 @@
-package main
+package content
 
 import (
 	"io/ioutil"
@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func getParent(w http.ResponseWriter, r *http.Request) {
+func GetParent(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Get parent")
 	data, err := ioutil.ReadFile("static-parent.json")
 	if err != nil {

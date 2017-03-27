@@ -7,13 +7,9 @@ import (
 	"net/http"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	generator "github.com/ONSdigital/dp-publish-pipeline/generator-api"
 	_ "github.com/lib/pq"
 )
-
-type fileWriter func([]string) error
-
-const xlsFormat = "xls"
-const csvFormat = "csv"
 
 var db *sql.DB
 var findMetaDataStatement *sql.Stmt
@@ -32,9 +28,9 @@ func generateFile(w http.ResponseWriter, r *http.Request) {
 	}
 	pageType := utils.GetType(data)
 	if pageType == "timeseries" {
-		generateTimeseries(data, filter, format, w)
+		generator.GenerateTimeseries(data, filter, format, w)
 	} else if pageType == "chart" {
-		generateChart(data, format, w)
+		generator.GenerateChart(data, format, w)
 	} else {
 		http.Error(w, "Unsupported type", http.StatusBadRequest)
 	}
@@ -50,14 +46,14 @@ func exportFiles(w http.ResponseWriter, r *http.Request) {
 		copydata(item, format, filter, w)
 	}
 
-	if format == csvFormat {
+	if generator.IsCsv(format) {
 		utils.SetCSVContentHeader(w)
 	} else {
 		utils.SetXLSContentHeader(w)
 	}
 }
 
-func copydata(uri string, format string, filter DataFilter, w http.ResponseWriter) {
+func copydata(uri string, format string, filter generator.DataFilter, w http.ResponseWriter) {
 	data, err := loadPageData(uri)
 	if err != nil {
 		http.Error(w, "Content not found", http.StatusNotFound)
@@ -66,9 +62,9 @@ func copydata(uri string, format string, filter DataFilter, w http.ResponseWrite
 	pageType := utils.GetType(data)
 	log.Printf("page Type : %s", pageType)
 	if pageType == "timeseries" {
-		generateTimeseries(data, filter, format, w)
+		generator.GenerateTimeseries(data, filter, format, w)
 	} else if pageType == "chart" {
-		generateChart(data, format, w)
+		generator.GenerateChart(data, format, w)
 	} else {
 		http.Error(w, "Unsupported type", http.StatusBadRequest)
 	}
@@ -77,7 +73,7 @@ func copydata(uri string, format string, filter DataFilter, w http.ResponseWrite
 func findParams(query *http.Request) (string, string, error) {
 	format := query.URL.Query().Get("format")
 	uri := query.URL.Query().Get("uri")
-	if format != csvFormat && format != xlsFormat {
+	if !generator.IsCsv(format) && !generator.IsXls(format) {
 		return "", "", errors.New("Unsupported format : " + format)
 	}
 	if uri == "" {
@@ -86,8 +82,8 @@ func findParams(query *http.Request) (string, string, error) {
 	return format, uri, nil
 }
 
-func findFilterParams(query *http.Request) DataFilter {
-	var filter DataFilter
+func findFilterParams(query *http.Request) generator.DataFilter {
+	var filter generator.DataFilter
 	filter.FromMonth = query.URL.Query().Get("fromMonth")
 	filter.FromYear = query.URL.Query().Get("fromYear")
 	filter.ToMonth = query.URL.Query().Get("toMonth")

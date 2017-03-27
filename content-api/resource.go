@@ -1,4 +1,4 @@
-package main
+package content
 
 import (
 	"database/sql"
@@ -11,7 +11,7 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 )
 
-func getResource(w http.ResponseWriter, r *http.Request) {
+func GetResource(w http.ResponseWriter, r *http.Request, st *sql.Stmt) {
 	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
 	endpoint := utils.GetEnvironmentVariable("S3_URL", "localhost:4000")
 	accessKeyID := utils.GetEnvironmentVariable("S3_ACCESS_KEY", "1234")
@@ -22,7 +22,7 @@ func getResource(w http.ResponseWriter, r *http.Request) {
 	if lang == "" {
 		lang = "en"
 	}
-	results := findS3DataStatement.QueryRow(uri + "?lang=" + lang)
+	results := st.QueryRow(uri + "?lang=" + lang)
 	var s3Location sql.NullString
 	notFound := results.Scan(&s3Location)
 	if notFound != nil {

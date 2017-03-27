@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	content "github.com/ONSdigital/dp-publish-pipeline/content-api"
 	_ "github.com/lib/pq"
 )
 
@@ -69,15 +70,23 @@ func main() {
 	// both endpoints uses the same function handler.
 	http.HandleFunc("/data/", getData)
 	http.HandleFunc("/data", getData)
-	http.HandleFunc("/parent/", getParent)
-	http.HandleFunc("/parent", getParent)
+	http.HandleFunc("/parent/", content.GetParent)
+	http.HandleFunc("/parent", content.GetParent)
 	http.HandleFunc("/resource/", getResource)
 	http.HandleFunc("/resource", getResource)
-	http.HandleFunc("/taxonomy/", getTaxonomy)
-	http.HandleFunc("/taxonomy", getTaxonomy)
+	http.HandleFunc("/taxonomy/", content.GetTaxonomy)
+	http.HandleFunc("/taxonomy", content.GetTaxonomy)
 	http.HandleFunc("/generator/", generatorHandler)
 	http.HandleFunc("/generator", generatorHandler)
 	http.HandleFunc("/export/", exportHandler)
 	http.HandleFunc("/export", exportHandler)
 	http.ListenAndServe(":"+port, nil)
+}
+
+func getResource(rw http.ResponseWriter, rq *http.Request) {
+        content.GetResource(rw, rq, findS3DataStatement)
+}
+
+func getData(rw http.ResponseWriter, rq *http.Request) {
+        content.GetData(rw, rq, findMetaDataStatement)
 }

@@ -9,6 +9,7 @@ REMOTE_ETC=etc
 ANSIBLE_ARGS?=
 ARCHIVE?=$(shell make $(MAKEFLAGS) latest-archive)
 HASH?=$(shell make hash)
+CMD_DIR?=cmd
 
 S3_BUCKET?=dp-publish-content-test
 S3_RELEASE_FOLDER?=release
@@ -27,18 +28,18 @@ build:
 	for service in $(SERVICES); do \
 		[[ " $(SKIP_SERVICES) " = *" $$service "* ]] && continue; \
 		echo Building $$service; \
-		cd $$service || exit 1; \
-		go build -o ../$(BUILD_ARCH)/$(REMOTE_BIN)/$$service || exit 1; \
-		cd - > /dev/null || exit 1; \
+		main=$(CMD_DIR)/$$service/main.go; \
+		[[ -f $$main ]] || exit 1; \
+		go build -o $(BUILD_ARCH)/$(REMOTE_BIN)/$$service $$main || exit 1; \
 	done
 
 test:
 	@rc=0; for service in $(SERVICES) $(UTILS); do \
 		[[ " $(SKIP_SERVICES) " = *" $$service "* ]] && continue; \
+		main=$(CMD_DIR)/$$service/main.go; \
+		[[ -f $$main ]] || exit 1; \
 		echo Testing $$service ...; \
-		cd $$service || exit 1; \
-		go test || rc=$?; \
-		cd - > /dev/null || exit 2; \
+		go test $$main || rc=$?; \
 	done; exit $$rc
 
 clean:
@@ -47,7 +48,7 @@ clean:
 producer:
 	kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.schedule
 $(SERVICES):
-	@cd $@ && go run -race $@.go
+	@main=$(CMD_DIR)/$@/main.go; if [[ ! -f $$main ]]; then echo Cannot see $$main; exit 1; fi; go run -race $$main
 all: $(SERVICES)
 
 hash:

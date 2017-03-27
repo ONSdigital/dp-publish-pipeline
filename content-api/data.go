@@ -1,4 +1,4 @@
-package main
+package content
 
 import (
 	"database/sql"
@@ -6,13 +6,13 @@ import (
 	"net/http"
 )
 
-func getData(w http.ResponseWriter, r *http.Request) {
+func GetData(w http.ResponseWriter, r *http.Request, st *sql.Stmt) {
 	uri := r.URL.Query().Get("uri")
 	lang := r.URL.Query().Get("lang")
 	if lang == "" {
 		lang = "en"
 	}
-	results := findMetaDataStatement.QueryRow(uri + "?lang=" + lang)
+	results := st.QueryRow(uri + "?lang=" + lang)
 	var content sql.NullString
 	notFound := results.Scan(&content)
 	if notFound != nil {
