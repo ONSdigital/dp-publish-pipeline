@@ -129,8 +129,8 @@ if [[ $error_count -gt 0 ]]; then
   exit $error_count
 fi
 
-inprogressDirectory=${ZEBEDEE_ROOT}"zebedee/collections/"${collectionID%-*}"/inprogress/*"
-completeDirectory=${ZEBEDEE_ROOT}"zebedee/collections/"${collectionID%-*}"/reviewed"
+inprogressDirectory=${ZEBEDEE_ROOT}"/zebedee/collections/"${collectionID%-*}"/inprogress/*"
+completeDirectory=${ZEBEDEE_ROOT}"/zebedee/collections/"${collectionID%-*}"/reviewed"
 if [[ -z $testing ]]; then
   log "Moving content to complete $completeDirectory"
   mv $inprogressDirectory $completeDirectory
