@@ -47,7 +47,7 @@ clean:
 producer:
 	kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.schedule
 $(SERVICES):
-	@cd $@ && go run -race $@.go
+	@if cd $@; then for s in $@.go main.go;do test -f $$s || continue; go run -race $$s; break; done;fi
 all: $(SERVICES)
 
 hash:
