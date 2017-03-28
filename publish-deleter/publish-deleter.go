@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"log"
 
-	elastic "gopkg.in/olivere/elastic.v3"
+	elastic "gopkg.in/olivere/elastic.v5"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -30,7 +31,7 @@ func publishDelete(jsonMessage []byte, deleteStatement *sql.Stmt, elasticClient 
 		return sqlErr
 	}
 
-	elasticClient.DeleteByQuery("/ons/_all/_query?q=id:" + message.Uri).Do()
+	elasticClient.DeleteByQuery("/ons/_all/_query?q=id:" + message.Uri).Do(context.Background())
 	producer <- jsonMessage
 	return nil
 }
