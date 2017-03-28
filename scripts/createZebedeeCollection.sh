@@ -4,6 +4,7 @@
 
 log() { echo $(date '+%Y-%m-%d %T') "$@"; }
 testing=
+faily=
 max_running=50
 max_errors=1
 
@@ -49,6 +50,9 @@ while [[ $# -gt 1 ]]; do
             ;;
         --test)
             testing=1
+            ;;
+        --faily)
+            faily=1
             ;;
         *)
             log Bad arg: $key >&2
@@ -103,9 +107,10 @@ for file in ${filesToSend[@]}; do
     if [[ -z $testing ]]; then
       fileAdded=$(curl -sb -X POST --cookie "access_token=${TOKEN}" $curlUri -d @$file -k)
     else
-      sleep 1.$run_seq
+      log send $curlUri
+      sleep 0.$run_seq
       fileAdded=true
-      if [[ $run_seq == *[248] ]]; then
+      if [[ -n $faily && $run_seq == *[248] ]]; then
         fileAdded=$run_seq  # simulate failure for some jobs
       fi
     fi
