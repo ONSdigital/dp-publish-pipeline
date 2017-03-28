@@ -1,7 +1,7 @@
 {
     "analysis": {
         "analyzer": {
-            "default_index": {
+            "default": {
                 "filter": [
                     "trim",
                     "lowercase"
