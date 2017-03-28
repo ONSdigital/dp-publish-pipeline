@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	content "github.com/ONSdigital/dp-publish-pipeline/content-api"
+	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	_ "github.com/lib/pq"
 )
 
@@ -80,13 +80,13 @@ func main() {
 	http.HandleFunc("/generator", generatorHandler)
 	http.HandleFunc("/export/", exportHandler)
 	http.HandleFunc("/export", exportHandler)
-	http.ListenAndServe(":"+port, nil)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
 func getResource(rw http.ResponseWriter, rq *http.Request) {
-        content.GetResource(rw, rq, findS3DataStatement)
+	content.GetResource(rw, rq, findS3DataStatement)
 }
 
 func getData(rw http.ResponseWriter, rq *http.Request) {
-        content.GetData(rw, rq, findMetaDataStatement)
+	content.GetData(rw, rq, findMetaDataStatement)
 }
