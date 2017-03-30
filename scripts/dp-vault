@@ -1,0 +1,52 @@
+#!/bin/bash
+
+export VAULT_ADDR='http://127.0.0.1:8200'
+
+function usage {
+    echo "-i, --init                  : Configure vault with policies and to enable settings"
+    echo "-a, --add <name policies,>  : Add approle account"
+    echo "-t, --token                 : Generate a token from a approle"
+    echo "--------------------"
+    echo "policies : token_renew,zebedee_read,zebedee_write"
+}
+
+
+function init {
+  vault auth-enable approle
+  vault policy-write token_renew token_renew_policy.hcl
+  vault policy-write zebedee_read zebedee_read_policy.hcl
+  vault policy-write zebedee_write zebedee_write_policy.hcl
+  addAccount zebedee-cms token_renew,zebedee_write
+  addAccount scheduler token_renew,zebedee_read
+}
+
+function addAccount {
+  # To create periodic tokens you must set period to the max time before a token
+  # is revoked. If a service renew the token the time is reset back to the time
+  # set in period.
+  vault write -f auth/approle/role/$1 display_name=$1 policies=$2 period=10m\
+    secret_id_ttl=10m token_num_uses=0 token_ttl=10m secret_id_num_uses=0
+}
+
+
+function accountInfo {
+  roleId=$(vault read -format=json auth/approle/role/$1/role-id | jq .data.role_id)
+  secret=$(vault write -format=json -f auth/approle/role/$1/secret-id | jq .data.secret_id)
+  roleId=$(echo "$roleId" | tr -d '"')
+  secret=$(echo "$secret" | tr -d '"')
+  token=$(vault write -format=json auth/approle/login role_id=$roleId secret_id=$secret | jq .auth.client_token)
+  token=$(echo "$token" | tr -d '"')
+
+  echo "$1"
+  echo "Token    : " $token
+}
+
+while [[ -n $1 ]]; do
+	arg=$1; shift
+	if   [[ $arg == -i || $arg == --init ]]; then init; break
+  elif   [[ $arg == -a || $arg == --add ]]; then addAccount $1 $2; break
+  elif   [[ $arg == -t || $arg == --token ]]; then accountInfo $1; break
+  elif   [[ $arg == -h || $arg == --help ]]; then usage ; break
+  fi
+  break;
+done

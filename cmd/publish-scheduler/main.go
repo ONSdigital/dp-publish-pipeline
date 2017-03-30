@@ -9,6 +9,7 @@ import (
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/dp-publish-pipeline/vault"
 
 	"database/sql"
 
@@ -30,8 +31,8 @@ type scheduleJob struct {
 	scheduleId     int64
 	collectionId   string
 	collectionPath string
-	encryptionKey  string
 	scheduleTime   int64
+	encryptionKey  string
 	files          []kafka.FileResource
 	urisToDelete   []kafka.FileResource
 }
@@ -97,7 +98,6 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 			collectionId:   message.CollectionId,
 			collectionPath: message.CollectionPath,
 			scheduleTime:   scheduleTime,
-			encryptionKey:  message.EncryptionKey,
 		}
 
 		var files []kafka.FileResource
@@ -122,7 +122,7 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 	}
 }
 
-func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGapNano int64) {
+func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGapNano int64, vaultClient *vault.VaultClient) {
 	epochTime := time.Now().UnixNano()
 	launchedThisTick := 0
 
@@ -140,11 +140,11 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 
 	for rows.Next() {
 		var (
-			collectionId, collectionPath, encryptionKey sql.NullString
-			scheduleId, startTime, scheduleTime         sql.NullInt64
+			collectionId, collectionPath        sql.NullString
+			scheduleId, startTime, scheduleTime sql.NullInt64
 		)
 
-		if err = rows.Scan(&scheduleId, &startTime, &scheduleTime, &collectionId, &collectionPath, &encryptionKey); err != nil {
+		if err = rows.Scan(&scheduleId, &startTime, &scheduleTime, &collectionId, &collectionPath); err != nil {
 			log.Panic(err)
 		}
 
@@ -160,7 +160,7 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 			collectionId:   collectionId.String,
 			collectionPath: collectionPath.String,
 			scheduleTime:   scheduleTime.Int64,
-			encryptionKey:  encryptionKey.String,
+			encryptionKey:  getEncryptionKeyFromVault(collectionId.String, vaultClient),
 			files:          files,
 			urisToDelete:   deletes,
 		}
@@ -220,7 +220,7 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 		log.Panic(err)
 	}
 
-	if jobStmt, err = txn.Prepare("INSERT INTO schedule (collection_id, collection_path, schedule_time, encryption_key, start_time, complete_time) VALUES ($1, $2, $3, $4, NULL, NULL) RETURNING schedule_id"); err != nil {
+	if jobStmt, err = txn.Prepare("INSERT INTO schedule (collection_id, collection_path, schedule_time, start_time, complete_time) VALUES ($1, $2, $3, NULL, NULL) RETURNING schedule_id"); err != nil {
 		rollbackAndError(txn, err)
 	}
 	if fileStmt, err = txn.Prepare("INSERT INTO schedule_file (schedule_id, uri, file_location) VALUES ($1, $2, $3) RETURNING schedule_file_id"); err != nil {
@@ -231,7 +231,7 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 	}
 
 	// insert job into schedule
-	res := jobStmt.QueryRow((*jobObj).collectionId, (*jobObj).collectionPath, (*jobObj).scheduleTime, (*jobObj).encryptionKey)
+	res := jobStmt.QueryRow((*jobObj).collectionId, (*jobObj).collectionPath, (*jobObj).scheduleTime)
 	if err = res.Scan(&scheduleId); err != nil {
 		rollbackAndError(txn, err)
 	}
@@ -330,6 +330,18 @@ func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
 	}
 }
 
+func getEncryptionKeyFromVault(collectionId string, vaultClient *vault.VaultClient) string {
+	data, err := vaultClient.Read("secret/zebedee-cms/" + collectionId)
+	if err != nil {
+		log.Panicf("Failed to find encryption key : %s", err.Error())
+	}
+	key, ok := data["encryption_key"].(string)
+	if ok {
+		return key
+	}
+	return ""
+}
+
 func (dbMeta dbMetaObj) prep(tag, sql string) {
 	var err error
 	dbMeta.prepped[tag], err = dbMeta.db.Prepare(sql)
@@ -346,6 +358,15 @@ func main() {
 	produceTotalTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 	restartGap, err := utils.GetEnvironmentVariableInt("RESEND_AFTER_QUIET_SECONDS", 0)
+	vaultToken := utils.GetEnvironmentVariable("VAULT_TOKEN", "")
+	vaultAddr := utils.GetEnvironmentVariable("VAULT_ADDR", "http://127.0.0.1:8200")
+	vaultRenewTime, err := utils.GetEnvironmentVariableInt("VAULT_RENEW_TIME", 5)
+
+	vaultClient, err := vault.CreateVaultClient(vaultToken, vaultAddr)
+	if err != nil {
+		log.Panicf("Failed to connect to vault : %s", err.Error())
+	}
+
 	if err != nil {
 		log.Panicf("Failed to parse RESEND_AFTER_QUIET_SECONDS: %s", err)
 	}
@@ -362,9 +383,9 @@ func main() {
 	dbMeta.prep("load-incomplete-files", "SELECT schedule_file_id, uri, file_location FROM schedule_file WHERE schedule_id=$1 AND complete_time IS NULL")
 	dbMeta.prep("load-incomplete-deletes", "SELECT schedule_delete_id, uri FROM schedule_delete WHERE schedule_id=$1 AND complete_time IS NULL")
 	if restartGap == 0 {
-		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND start_time IS NULL AND schedule_time <= $1 RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path, encryption_key")
+		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND start_time IS NULL AND schedule_time <= $1 RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path")
 	} else {
-		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND schedule_time <= $1 AND (start_time IS NULL OR (start_time <= $2 AND NOT EXISTS(SELECT 1 FROM schedule_file sf WHERE s.schedule_id=sf.schedule_id AND sf.complete_time > $2))) RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path, encryption_key")
+		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND schedule_time <= $1 AND (start_time IS NULL OR (start_time <= $2 AND NOT EXISTS(SELECT 1 FROM schedule_file sf WHERE s.schedule_id=sf.schedule_id AND sf.complete_time > $2))) RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path")
 	}
 
 	log.Printf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic)
@@ -380,7 +401,18 @@ func main() {
 	go func() {
 		tock := time.Tick(tick)
 		for _ = range tock {
-			checkSchedule(publishChannel, dbMeta, restartGapNano)
+			checkSchedule(publishChannel, dbMeta, restartGapNano, vaultClient)
+		}
+	}()
+
+	go func() {
+		tock := time.Tick(time.Duration(vaultRenewTime) * time.Minute)
+		for _ = range tock {
+			err := vaultClient.Renew()
+			if err != nil {
+				log.Panicf("Failed to renew vault token : %s", err.Error())
+			}
+			log.Printf("Renewed vault token")
 		}
 	}()
 
