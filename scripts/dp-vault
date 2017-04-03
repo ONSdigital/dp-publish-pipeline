@@ -1,6 +1,11 @@
 #!/bin/bash
 
-export VAULT_ADDR='http://127.0.0.1:8200'
+scriptDirectory="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [ -z "$VAULT_ADDR"]
+then
+    export VAULT_ADDR='http://127.0.0.1:8200'
+fi
 
 function usage {
     echo "-i, --init                  : Configure vault with policies and to enable settings"
@@ -13,17 +18,17 @@ function usage {
 
 function init {
   vault auth-enable approle
-  vault policy-write token_renew token_renew_policy.hcl
-  vault policy-write zebedee_read zebedee_read_policy.hcl
-  vault policy-write zebedee_write zebedee_write_policy.hcl
+  vault policy-write token_renew $scriptDirectory"/token_renew_policy.hcl"
+  vault policy-write zebedee_read $scriptDirectory"/zebedee_read_policy.hcl"
+  vault policy-write zebedee_write $scriptDirectory"/zebedee_write_policy.hcl"
   addAccount zebedee-cms token_renew,zebedee_write
   addAccount scheduler token_renew,zebedee_read
 }
 
 function addAccount {
   # To create periodic tokens you must set period to the max time before a token
-  # is revoked. If a service renew the token the time is reset back to the time
-  # set in period.
+  # is revoked. If a service renews the token, the time is reset back to the time
+  # set in the period.
   vault write -f auth/approle/role/$1 display_name=$1 policies=$2 period=10m\
     secret_id_ttl=10m token_num_uses=0 token_ttl=10m secret_id_num_uses=0
 }
