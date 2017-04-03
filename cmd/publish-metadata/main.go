@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"strings"
 
@@ -18,7 +19,7 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 	if err != nil {
 		return fmt.Errorf("Failed to parse json message: %s", err)
 	}
-	if message.FileLocation == "" || message.EncryptionKey == "" || message.CollectionId == "" || message.Uri == "" {
+	if message.FileLocation == "" || message.CollectionId == "" || message.Uri == "" {
 		return fmt.Errorf("Json message missing fields: %s", string(jsonMessage))
 	}
 	if !strings.HasSuffix(message.FileLocation, ".json") {
@@ -26,20 +27,28 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 	}
 
 	var content []byte
-	var decryptErr error
+	var contentErr error
 	if strings.HasPrefix(message.FileLocation, "file://") {
-		content, decryptErr = decrypt.DecryptFile(message.FileLocation[7:], message.EncryptionKey)
+		if message.EncryptionKey != "" {
+			content, contentErr = decrypt.DecryptFile(message.FileLocation[7:], message.EncryptionKey)
+		} else {
+			content, contentErr = ioutil.ReadFile(message.FileLocation[7:])
+		}
 	} else if strings.HasPrefix(message.FileLocation, "s3://") {
 		bucketPrefix := "s3://" + s3UpstreamClient.Bucket + "/"
 		if !strings.HasPrefix(message.FileLocation, bucketPrefix) {
 			return fmt.Errorf("Unexpected bucket: wanted %s, for %s", bucketPrefix, message.FileLocation)
 		}
-		content, decryptErr = decrypt.DecryptS3(s3UpstreamClient, message.FileLocation[len(bucketPrefix):], message.EncryptionKey)
+		if message.EncryptionKey != "" {
+			content, contentErr = decrypt.DecryptS3(s3UpstreamClient, message.FileLocation[len(bucketPrefix):], message.EncryptionKey)
+		} else {
+			content, contentErr = s3UpstreamClient.GetObject(message.FileLocation[len(bucketPrefix):])
+		}
 	} else {
-		decryptErr = fmt.Errorf("Bad FileLocation")
+		contentErr = fmt.Errorf("Bad FileLocation")
 	}
-	if decryptErr != nil {
-		return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %q - %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, decryptErr)
+	if contentErr != nil {
+		return fmt.Errorf("Job %d Collection %q - Failed to obtain file %d: %q - %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, contentErr)
 	}
 
 	data, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, FileContent: string(content), CollectionId: message.CollectionId})

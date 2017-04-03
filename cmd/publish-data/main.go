@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"path/filepath"
 	"strings"
@@ -19,27 +20,35 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, s3UpstreamClient, s3Clie
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		return fmt.Errorf("Invalid JSON: %q", jsonMessage)
 	}
-	if message.CollectionId == "" || message.EncryptionKey == "" || message.FileLocation == "" || message.Uri == "" {
+	if message.CollectionId == "" || message.FileLocation == "" || message.Uri == "" {
 		return fmt.Errorf("Malformed JSON: %q", jsonMessage)
 	}
 	if strings.HasSuffix(message.FileLocation, ".json") {
 		return nil
 	}
 	var content []byte
-	var decryptErr error
+	var contentErr error
 	if strings.HasPrefix(message.FileLocation, "s3://") {
 		bucketPrefix := "s3://" + s3UpstreamClient.Bucket + "/"
 		if !strings.HasPrefix(message.FileLocation, bucketPrefix) {
 			return fmt.Errorf("Unexpected bucket: wanted %s, for %s", bucketPrefix, message.FileLocation)
 		}
-		content, decryptErr = decrypt.DecryptS3(s3UpstreamClient, message.FileLocation[len(bucketPrefix):], message.EncryptionKey)
+		if message.EncryptionKey != "" {
+			content, contentErr = decrypt.DecryptS3(s3UpstreamClient, message.FileLocation[len(bucketPrefix):], message.EncryptionKey)
+		} else {
+			content, contentErr = s3UpstreamClient.GetObject(message.FileLocation[len(bucketPrefix):])
+		}
 	} else if strings.HasPrefix(message.FileLocation, "file://") {
-		content, decryptErr = decrypt.DecryptFile(message.FileLocation[7:], message.EncryptionKey)
+		if message.EncryptionKey != "" {
+			content, contentErr = decrypt.DecryptFile(message.FileLocation[7:], message.EncryptionKey)
+		} else {
+			content, contentErr = ioutil.ReadFile(message.FileLocation[7:])
+		}
 	} else {
-		decryptErr = fmt.Errorf("Bad FileLocation")
+		contentErr = fmt.Errorf("Bad FileLocation")
 	}
-	if decryptErr != nil {
-		return fmt.Errorf("Job %d Collection %q - Failed to decrypt file %d: %s - error %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, decryptErr)
+	if contentErr != nil {
+		return fmt.Errorf("Job %d Collection %q - Failed to open/decrypt file %d: %s - error %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, contentErr)
 	}
 	s3Path := filepath.Join(uuid.NewV1().String(), message.CollectionPath, filepath.Base(message.FileLocation))
 	s3Client.AddObject(string(content), s3Path, message.CollectionId, message.ScheduleId)
