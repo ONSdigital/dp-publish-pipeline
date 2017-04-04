@@ -174,12 +174,10 @@ while [[ -n $1 ]]; do
 						[[ -n $files2del ]] && files2del=',"UrisToDelete":'"$files2del"
 						continue
 					fi
-					# files=$files${files:+,}'{"Location":"file://'"$coll_d$i"'","Uri":"'"$i"'"}'
-					files=$files${files:+,}'{"Location":"s3://upstream/'"$col$i"'","Uri":"'"$i"'"}'
+					files=$files${files:+,}'{"Location":"s3://'"${UPSTREAM_S3_BUCKET:-upstream-content}/$col$i"'","Uri":"'"$i"'"}'
 					let filecount++
 				done
-				key=$(awk '$1=="'"$col"'"{print $3}' $ZEBEDEE_ROOT/collections/keys.txt); [[ -n $key ]] || die Cannot find key for collection $col
-				echo '{"Action":"schedule","CollectionID":"'"CollId_$col"'","CollectionPath":"'"$col"'","EncryptionKey":"'"$key"'","ScheduleTime":"'$when'","Files":['"$files"']'"$files2del"'}'
+				echo '{"Action":"schedule","CollectionID":"'"CollId_$col"'","CollectionPath":"'"$col"'","ScheduleTime":"'$when'","Files":['"$files"']'"$files2del"'}'
 			elif [[ $arg == --unseed ]]; then
 				echo '{"Action":"cancel","CollectionID":"'"CollId_$col"'","ScheduleTime":"'$when'"}'
 			fi
