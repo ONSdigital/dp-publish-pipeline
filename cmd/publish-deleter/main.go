@@ -78,7 +78,10 @@ func main() {
 	}
 
 	log.Printf("Starting Publish-deletes")
-	consumer := kafka.NewConsumerGroup(consumerTopic, "publish-deletes")
+	consumer, err := kafka.NewConsumerGroup(consumerTopic, "publish-deletes")
+	if err != nil {
+		log.Panicf("Could not obtain consumer: %s", err)
+	}
 	producer := kafka.NewProducer(producerTopic)
 	for {
 		select {
@@ -88,6 +91,8 @@ func main() {
 			} else {
 				consumerMessage.Commit()
 			}
+		case errorMessage := <-consumer.Errors:
+			log.Panicf("Aborting: %s", errorMessage)
 		}
 	}
 }

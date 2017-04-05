@@ -98,7 +98,11 @@ func main() {
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 
-	fileCompleteConsumer := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
+	fileCompleteConsumer, err := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
+	if err != nil {
+		log.Panicf("Could not obtain consumer: %s", err)
+	}
+
 	db, err := sql.Open("postgres", dbSource)
 	if err != nil {
 		log.Panicf("DB open error: %s", err.Error())
@@ -125,6 +129,8 @@ func main() {
 		case consumerMessage := <-fileCompleteConsumer.Incoming:
 			storeData(consumerMessage.GetData(), s3statement, metaStatement)
 			consumerMessage.Commit()
+		case errorMessage := <-fileCompleteConsumer.Errors:
+			log.Panicf("Aborting: %s", errorMessage)
 		case <-signals:
 			log.Printf("Service stopped")
 			return

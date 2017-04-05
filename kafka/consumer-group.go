@@ -1,6 +1,7 @@
 package kafka
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -16,6 +17,7 @@ type ConsumerGroup struct {
 	Consumer *cluster.Consumer
 	Incoming chan Message
 	Closer   chan bool
+	Errors   chan error
 }
 
 type Message struct {
@@ -33,48 +35,52 @@ func (M Message) Commit() {
 	//log.Printf("Offset : %d, Partition : %d", M.message.Offset, M.message.Partition)
 }
 
-func NewConsumerGroup(topic string, group string) ConsumerGroup {
+func NewConsumerGroup(topic string, group string) (*ConsumerGroup, error) {
 	config := cluster.NewConfig()
 	config.Group.Return.Notifications = true
 	config.Consumer.Return.Errors = true
 	config.Consumer.MaxWaitTime = 50 * time.Millisecond
 	brokers := []string{utils.GetEnvironmentVariable("KAFKA_ADDR", "localhost:9092")}
-	consumer, err := cluster.NewConsumer(brokers, group, []string{topic}, config)
 
+	consumer, err := cluster.NewConsumer(brokers, group, []string{topic}, config)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("Bad NewConsumer of %q: %s", topic, err)
 	}
 
-	messageChannel := make(chan Message)
-	closerChannel := make(chan bool)
+	cg := ConsumerGroup{
+		Consumer: consumer,
+		Incoming: make(chan Message),
+		Closer:   make(chan bool),
+		Errors:   make(chan error),
+	}
 	signals := make(chan os.Signal, 1)
 	//signal.Notify(signals, os.)
 
 	go func() {
-		defer consumer.Close()
+		defer cg.Consumer.Close()
 		log.Printf("Started kafka consumer of topic %q group %q", topic, group)
 		for {
 			select {
-			case err := <-consumer.Errors():
+			case err := <-cg.Consumer.Errors():
 				log.Printf("Error: %s", err.Error())
-				return
+				cg.Errors <- err
 			default:
 				select {
-				case msg := <-consumer.Messages():
-					messageChannel <- Message{msg, consumer}
-				case n := <-consumer.Notifications():
+				case msg := <-cg.Consumer.Messages():
+					cg.Incoming <- Message{msg, cg.Consumer}
+				case n := <-cg.Consumer.Notifications():
 					log.Printf("Rebalancing %q group %q - partitions %+v", topic, group, n.Current[topic])
 				case <-time.After(tick):
-					consumer.CommitOffsets()
+					cg.Consumer.CommitOffsets()
 				case <-signals:
 					log.Printf("Quitting kafka consumer of topic %q group %q", topic, group)
 					return
-				case <-closerChannel:
+				case <-cg.Closer:
 					log.Printf("Closing kafka consumer of topic %q group %q", topic, group)
 					return
 				}
 			}
 		}
 	}()
-	return ConsumerGroup{Consumer: consumer, Incoming: messageChannel, Closer: closerChannel}
+	return &cg, nil
 }

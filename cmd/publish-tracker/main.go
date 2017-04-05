@@ -118,7 +118,10 @@ func main() {
 	dbMeta.prep("update-delete-file", "UPDATE schedule_delete SET complete_time=$2 WHERE schedule_delete_id=$1")
 	dbMeta.prep("update-complete-job", "UPDATE schedule SET complete_time=$2 WHERE schedule_id=$1 AND start_time IS NOT NULL AND complete_time IS NULL RETURNING collection_id, start_time")
 
-	fileConsumer := kafka.NewConsumerGroup(completeFileTopic, "publish-tracker")
+	fileConsumer, err := kafka.NewConsumerGroup(completeFileTopic, "publish-tracker")
+	if err != nil {
+		log.Panicf("Could not obtain consumer: %s", err)
+	}
 	producer := kafka.NewProducer(completeCollectionTopic)
 
 	rateLimitFileCompletes := make(chan bool, maxConcurrentFileCompletes)
@@ -139,6 +142,8 @@ func main() {
 				markFileComplete(consumerMessage.GetData(), dbMeta)
 				consumerMessage.Commit()
 			}()
+		case errorMessage := <-fileConsumer.Errors:
+			log.Panicf("Aborting: %s", errorMessage)
 		}
 	}
 }

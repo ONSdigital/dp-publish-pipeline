@@ -74,7 +74,10 @@ func main() {
 	s3UpstreamClient := s3.CreateClient(upstreamBucketName, upstreamEndpoint, upstreamAccessKeyID, upstreamSecretAccessKey, false)
 
 	log.Printf("Starting Publish-metadata from %q to %q, %q", consumeTopic, completeFileTopic, completeFileFlagTopic)
-	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-metadata")
+	consumer, err := kafka.NewConsumerGroup(consumeTopic, "publish-metadata")
+	if err != nil {
+		log.Panicf("Could not obtain consumer: %s", err)
+	}
 	fileProducer := kafka.NewProducer(completeFileTopic)
 	flagProducer := kafka.NewProducer(completeFileFlagTopic)
 	for {
@@ -84,6 +87,8 @@ func main() {
 				log.Printf("Error: %s", err)
 			}
 			consumerMessage.Commit()
+		case errorMessage := <-consumer.Errors:
+			log.Panicf("Aborting: %s", errorMessage)
 		}
 	}
 }

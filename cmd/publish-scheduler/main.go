@@ -391,7 +391,10 @@ func main() {
 	log.Printf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic)
 
 	totalProducer := kafka.NewProducer(produceTotalTopic)
-	scheduleConsumer := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
+	scheduleConsumer, err := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
+	if err != nil {
+		log.Panicf("Could not obtain consumer: %s", err)
+	}
 	fileProducer := kafka.NewProducer(produceFileTopic)
 	deleteProducer := kafka.NewProducer(produceDeleteTopic)
 
@@ -424,6 +427,10 @@ func main() {
 				scheduleMessage.Commit()
 			case publishMessage := <-publishChannel:
 				go publishCollection(publishMessage, fileProducer.Output, deleteProducer.Output, totalProducer.Output)
+			case errorMessage := <-scheduleConsumer.Errors:
+				log.Printf("Aborting: %s", errorMessage)
+				exitChannel <- true
+				return
 			}
 		}
 	}()

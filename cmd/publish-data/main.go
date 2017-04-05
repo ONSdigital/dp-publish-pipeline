@@ -84,7 +84,10 @@ func main() {
 
 	log.Printf("Starting Publish-Data from %q from %q to %q, %q", zebedeeRoot, consumeTopic, completeFileTopic, completeFileFlagTopic)
 
-	consumer := kafka.NewConsumerGroup(consumeTopic, "publish-data")
+	consumer, err := kafka.NewConsumerGroup(consumeTopic, "publish-data")
+	if err != nil {
+		log.Panicf("Could not obtain consumer: %s", err)
+	}
 	completeFileProducer := kafka.NewProducer(completeFileTopic)
 	completeFileFlagProducer := kafka.NewProducer(completeFileFlagTopic)
 	for {
@@ -95,6 +98,8 @@ func main() {
 			} else {
 				consumerMessage.Commit()
 			}
+		case errorMessage := <-consumer.Errors:
+			log.Panicf("Aborting: %s", errorMessage)
 		}
 	}
 }
