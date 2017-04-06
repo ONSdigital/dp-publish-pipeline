@@ -2,7 +2,9 @@
 
 # Notes : This needs jq installed use `brew install jq`
 
-log() { echo $(date '+%Y-%m-%d %T') "$@"; }
+log()  { echo $(date '+%Y-%m-%d %T') "$@"; }
+warn() { log "$@" >&2 ; }
+die()  { local rc=$1; shift; warn "$@"; exit $rc; }
 testing=
 faily=
 max_running=50
@@ -62,14 +64,14 @@ while [[ $# -gt 1 ]]; do
             faily=1
             ;;
         *)
-            log Bad arg: $key >&2
-            exit 2 # unknown option
+            die 2 Bad arg: $key
             ;;
     esac
     shift # past argument or value
 done
 log "Collection   = $collectionName"
 log "DIRECTORY    = $DIRECTORY"
+log "HOST         = $HOST"
 log "Token        = $TOKEN"
 
 # traverse collections
@@ -89,11 +91,13 @@ log "Response     : $response"
 collectionID=$(echo $response | jq -r '.id')
 log "collectionID : $collectionID"
 if [[ $collectionID == null || -z $collectionID ]]; then
-  log Bad collectionID >&2
-  exit 2
+  die 2 Bad collectionID
 fi
 
 collectionDirectory=$ZEBEDEE_ROOT/zebedee/collections/${collectionID%-*}
+if [[ ! -f $collectionDirectory.json ]]; then
+  die 2 Cannot see $collectionDirectory.json
+fi
 if [[ -n $plaintext ]]; then
   sed -i -e 's/"isEncrypted":true,/"isEncrypted":false,/' $collectionDirectory.json || exit 2
 fi
@@ -114,7 +118,7 @@ for file in ${filesToSend[@]}; do
     let running--
     [[ $res != 0 ]] && let error_count++
     if [[ $error_count -ge $max_errors ]]; then
-      log FATAL Aborting after $error_count errors: $res
+      warn FATAL Aborting after $error_count errors: $res
       break
     fi
   fi
@@ -130,8 +134,7 @@ for file in ${filesToSend[@]}; do
       fi
     fi
     if [[ "$fileAdded" != "true" ]]; then
-      log "ERROR [$run_seq] Failed to add $uri to collection: $fileAdded"
-      exit 2
+      die 2 "ERROR [$run_seq] Failed to add $uri to collection: $fileAdded"
     fi
     log "[$run_seq] Added $uri to collection"
   } &
@@ -145,14 +148,13 @@ while (( running > 0 )); do
 done
 
 if [[ $error_count -gt 0 ]]; then
-  log "FATAL Collection had $error_count errors - aborting"
-  exit $error_count
+  die $error_count "FATAL Collection had $error_count errors - aborting"
 fi
 
-inprogressDirectory=${ZEBEDEE_ROOT}"/zebedee/collections/"${collectionID%-*}"/inprogress/*"
-completeDirectory=${ZEBEDEE_ROOT}"/zebedee/collections/"${collectionID%-*}"/reviewed"
+inprogressDirectory=${collectionDirectory}/inprogress
+completeDirectory=${collectionDirectory}/reviewed
 if [[ -z $testing ]]; then
   log "Moving content to complete $completeDirectory"
-  mv $inprogressDirectory $completeDirectory
+  mv $inprogressDirectory/* $completeDirectory || exit 2
 fi
 log "Collection ready to be approved - $error_count errors"
