@@ -7,6 +7,10 @@ testing=
 faily=
 max_running=50
 max_errors=1
+plaintext=
+ZEBEDEE_ROOT=${ZEBEDEE_ROOT:-$zebedee_root}
+DIRECTORY=.
+HOST=${HOST:-http://localhost:8081}
 
 # A random name for the collection
 collectionName=$(uuidgen)
@@ -48,6 +52,9 @@ while [[ $# -gt 1 ]]; do
             ZEBEDEE_ROOT="$2"
             shift # past argument
             ;;
+        -P|--plaintext)
+            plaintext=1
+            ;;
         --test)
             testing=1
             ;;
@@ -61,27 +68,35 @@ while [[ $# -gt 1 ]]; do
     esac
     shift # past argument or value
 done
-log "Collection = $collectionName"
-log "DIRECTORY  = $DIRECTORY"
-log "Token      = $TOKEN"
+log "Collection   = $collectionName"
+log "DIRECTORY    = $DIRECTORY"
+log "Token        = $TOKEN"
 
 # traverse collections
 filesToSend=$(find ${DIRECTORY} -type f)
 
 # Create collection
-log "Creating Collection : $collectionName"
+log "Creating     : $collectionName"
 
 if [[ -z $testing ]]; then
   response=$(curl -sb -X  POST --cookie "access_token=${TOKEN}" \
         $HOST"/zebedee/collection" -d "$collectionJson" -k)
 fi
 
-log Response: $response
+log "Response     : $response"
 # Find the collectionID in the json message. This is needed to add content
-# to the collection. (We also need to remove the quotes from the string)
-collectionID=$(echo $response | jq '.id')
-collectionID="${collectionID%\"}"
-collectionID="${collectionID#\"}"
+# to the collection.
+collectionID=$(echo $response | jq -r '.id')
+log "collectionID : $collectionID"
+if [[ $collectionID == null || -z $collectionID ]]; then
+  log Bad collectionID >&2
+  exit 2
+fi
+
+collectionDirectory=$ZEBEDEE_ROOT/zebedee/collections/${collectionID%-*}
+if [[ -n $plaintext ]]; then
+  sed -i -e 's/"isEncrypted":true,/"isEncrypted":false,/' $collectionDirectory.json || exit 2
+fi
 
 # Add content to the collection
 running=0
