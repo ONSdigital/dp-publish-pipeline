@@ -30,5 +30,9 @@ func (c *VaultClient) Read(path string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	if secret == nil {
+		// If there is no secret and no error return a empty map.
+		return make(map[string]interface{}), nil
+	}
 	return secret.Data, err
 }
