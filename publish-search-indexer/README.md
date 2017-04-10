@@ -49,7 +49,7 @@ cd dp-compose
 
 `kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.complete-file`
 
-`{ "collectionId":"test-0001", "fileLocation": "/about/data.json", "fileContent": "{\"uri\":\"/about\",\"type\":\"static_page\"}" }`
+`{"fileId":0,"scheduleId":0,"collectionId":"test-0001","Uri":"/about/data.json","fileContent":"{\"uri\":\"/about\",\"type\":\"static_page\"}"}`
 
 ##### Check that the page is updated in Elastic Search
 
