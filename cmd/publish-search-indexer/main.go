@@ -137,8 +137,8 @@ func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elas
 		return
 	}
 
-	isLatest := !strings.Contains(event.FileLocation, "previous")
 	if page.Description != nil {
+		isLatest := !strings.Contains(event.FileLocation, "/previous/v")
 		page.Description.LatestRelease = isLatest
 	}
 
