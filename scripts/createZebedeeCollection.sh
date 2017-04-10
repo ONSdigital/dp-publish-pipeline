@@ -99,7 +99,9 @@ if [[ ! -f $collectionDirectory.json ]]; then
   die 2 Cannot see $collectionDirectory.json
 fi
 if [[ -n $plaintext ]]; then
-  sed -i -e 's/"isEncrypted":true,/"isEncrypted":false,/' $collectionDirectory.json || exit 2
+  backupExt=.create$$
+  sed -i $backupExt -e 's/"isEncrypted":true,/"isEncrypted":false,/' $collectionDirectory.json || exit 2
+  rm $collectionDirectory.json$backupExt
 fi
 
 # Add content to the collection
