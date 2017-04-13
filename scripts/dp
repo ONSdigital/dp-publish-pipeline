@@ -20,6 +20,8 @@ usage() {
 					- start collID now (default) or next minute+<offset_sec>
 					- start N+1th job <stagger_sec> after Nth (default=0)
 		--unseed ...	- cancel scheduled jobs, args as per --seed
+		--file		- when using --seed, use file://... rather than s3://....
+		--seedlines	- when using --seed, use multiline
 		-p		- run the kafka producer (e.g. dp --seed test0001|dp -p)
 
 		--resize	- change the message size for kafka
@@ -68,9 +70,12 @@ export ZOOKEEPER=${ZOOKEEPER:-localhost:2181} KAFKA_ADDR=${KAFKA_ADDR:-localhost
 LOG_DIR=~/log
 KAFKA_TOPIC=${KAFKA_TOPIC:-uk.gov.ons.dp.web.schedule} sched_group=publish-scheduler tmp_file=/tmp/${USER}_dp_$$
 KAFKA_PARTITIONS=${KAFKA_PARTITIONS:-12}
+UPSTREAM_S3_BUCKET=${UPSTREAM_S3_BUCKET:-upstream-content}
 SERVICES=${SERVICES:-publish-metadata:$def_svc_num publish-data:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
 sql_tables="schedule schedule_file schedule_delete s3data metadata"
 use_mongo=
+use_file=
+seedlines=-n
 
 colr_n() { local col=$1; shift; if [[ -t 0 ]]; then echo -e '\e['${col}m"$@"'\e[0m'; else echo "$@"; fi; }
 colr() { colr_n 32 "$@"; }
@@ -104,6 +109,8 @@ while [[ -n $1 ]]; do
 	arg=$1; shift
 	if   [[ $arg == -h || $arg == --help ]]; then usage; break
 	elif [[ $arg == --svc     ]]; then SERVICES=$1; shift
+	elif [[ $arg == --file    ]]; then use_file=1
+	elif [[ $arg == --seedlines ]]; then seedlines=
 	elif [[ $arg == --kill || $arg == --ps || $arg == --ps-ok ]]; then
 		proc_re=
 		for s in $SERVICES; do
@@ -152,7 +159,7 @@ while [[ -n $1 ]]; do
 					when=$(date -d "1 minute -$(date '+%S') seconds ${1#:} seconds" '+%s')  # get time for next minute:00 add $1 secs
 					when_pp=$(date -d'@'$when)
 				fi
-			elif [[ -d $ZEBEDEE_ROOT/collections/$1/complete ]]; then
+			elif [[ -d $ZEBEDEE_ROOT/zebedee/collections/$1/complete ]]; then
 				end_coll=$1
 			else
 				break
@@ -165,19 +172,25 @@ while [[ -n $1 ]]; do
 		for (( c=${coll##test*(0)}; c <= ${end_coll##test*(0)}; c++ )); do
 			len=${#c} col=${coll:0:-len}$c       # get prefix of $coll removing length of $c (i.e. coll=test0009,c=10 so len=2 col=test0010)
 			# echo c=$c len=$len col=$col
-			files= files2del= filecount=0 coll_d=$ZEBEDEE_ROOT/collections/$col/complete
+			files2del= filecount=0 coll_d=$ZEBEDEE_ROOT/zebedee/collections/$col/complete
 			if [[ $arg == --seed ]]; then
-				for i in $(cd $coll_d && find . -type f); do
+				echo $seedlines '{"Action":"schedule","CollectionID":"'"CollId_$col"'","CollectionPath":"'"$col"'","ScheduleTime":"'$when'","Files":['
+				cd $coll_d && find . -type f | while read i; do
 					i=${i#\.}
 					if [[ $i = /manifest.json ]]; then
 						files2del=$(jq .urisToDelete $coll_d$i)
 						[[ -n $files2del ]] && files2del=',"UrisToDelete":'"$files2del"
 						continue
 					fi
-					files=$files${files:+,}'{"Location":"s3://'"${UPSTREAM_S3_BUCKET:-upstream-content}/$col$i"'","Uri":"'"$i"'"}'
+					(( filecount == 0 )) || echo -n ,
+					if [[ -n $use_file ]]; then
+						echo $seedlines '{"Location":"file://'"${coll_d}/$i"'","Uri":"'"$i"'"}'
+					else
+						echo $seedlines '{"Location":"s3://'"${UPSTREAM_S3_BUCKET}/$col$i"'","Uri":"'"$i"'"}'
+					fi
 					let filecount++
 				done
-				echo '{"Action":"schedule","CollectionID":"'"CollId_$col"'","CollectionPath":"'"$col"'","ScheduleTime":"'$when'","Files":['"$files"']'"$files2del"'}'
+				echo ']'"$files2del"'}'
 			elif [[ $arg == --unseed ]]; then
 				echo '{"Action":"cancel","CollectionID":"'"CollId_$col"'","ScheduleTime":"'$when'"}'
 			fi
@@ -203,16 +216,21 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --repartition ]]; then
 		kafka-topics$k_ext --alter --zookeeper $ZOOKEEPER --partitions $KAFKA_PARTITIONS --topic $KAFKA_TOPIC
 	elif [[ $arg == --groups ]]; then
-		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe;done
+		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do log $i; kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe 2>&1|egrep -v '^(Note: This will only.*)?$';done
 	elif [[ $arg == --reset ]]; then
 		log "Starting all-consuming consumer of $sched_group group for $KAFKA_TOPIC (Ctrl-C to quit)..."
 		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
 	elif [[ $arg == --db || $arg == --db-all ]]; then
 		sql "select * from schedule order by schedule_id" | perl -MTime::Piece -pE 'if($.<3){}else{s/\b(\d{13,})\b/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;}'
-		sql "select schedule_id, count(complete_time) AS num_complete   from schedule_file where complete_time IS NOT NULL group by schedule_id order by schedule_id"
-		sql "select schedule_id, count(complete_time) AS num_incomplete from schedule_file where complete_time IS NULL     group by schedule_id order by schedule_id"
-		sql "select * from schedule_file where complete_time IS NULL order by schedule_id,schedule_file_id" | perl -MTime::Piece -pE 'if($.<3){}else{s/\b(\d{13,})\b/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;}'
+		for t in schedule_file schedule_delete; do
+			sql "select schedule_id, count(complete_time) AS ${t}_complete   from $t where complete_time IS NOT NULL group by schedule_id order by schedule_id"
+			sql "select schedule_id, count(complete_time) AS ${t}_incomplete from $t where complete_time IS NULL     group by schedule_id order by schedule_id"
+		done
 		if [[ $arg == --db-all ]]; then
+			for t in schedule_file schedule_delete; do
+				log Incomplete from table: $t
+				sql "select * from $t where complete_time IS NULL order by schedule_id,${t}_id" | perl -MTime::Piece -pE 'if($.<3){}else{s/\b(\d{13,})\b/$1 . " " . localtime->new(substr($1,0,-9))->datetime/eg;}'
+			done
 			sql "select * from s3data"
 			sql "select * from metadata"
 		fi
