@@ -207,7 +207,9 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == -m ]]; then
 		sudo docker run -it --link $MONGODB_DB:mongo --rm mongo sh -c 'exec mongo "$MONGO_PORT_27017_TCP_ADDR:$MONGO_PORT_27017_TCP_PORT/'"$MONGODB_DB"'"'
 	elif [[ $arg == -c ]]; then log Starting consumer... of $KAFKA_TOPIC; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $KAFKA_TOPIC ${KAFKA_OFFSET:+--partition 0 --offset $KAFKA_OFFSET}
-	elif [[ $arg == -p ]]; then log Starting producer... to $KAFKA_TOPIC; kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC
+	elif [[ $arg == -p ]]; then
+		log Starting producer... to $KAFKA_TOPIC
+		kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --producer-property max.request.size=$KAFKA_MAX_BYTES --property max.message.bytes=$KAFKA_MAX_BYTES
 	elif [[ $arg == --resize ]]; then
 		for c in uk.gov.ons.dp.web.complete-file uk.gov.ons.dp.web.schedule; do
 			log "Setting max size of $KAFKA_MAX_BYTES for $c"
