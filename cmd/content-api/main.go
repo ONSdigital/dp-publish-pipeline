@@ -14,9 +14,9 @@ import (
 
 var findMetaDataStatement *sql.Stmt
 var findS3DataStatement *sql.Stmt
+var generatorURL string
 
 func exportHandler(w http.ResponseWriter, r *http.Request) {
-	generatorURL := utils.GetEnvironmentVariable("GENERATOR_URL", "localhost:8092")
 	r.ParseForm()
 	res, _ := http.PostForm("http://"+generatorURL+r.URL.String(), r.PostForm)
 	body, _ := ioutil.ReadAll(res.Body)
@@ -29,7 +29,6 @@ func exportHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func generatorHandler(w http.ResponseWriter, r *http.Request) {
-	generatorURL := utils.GetEnvironmentVariable("GENERATOR_URL", "localhost:8092")
 	res, _ := http.Get("http://" + generatorURL + r.URL.String())
 	body, _ := ioutil.ReadAll(res.Body)
 	if strings.Contains(r.URL.Query().Get("format"), "csv") {
@@ -50,6 +49,7 @@ func prepareSQLStatement(sql string, db *sql.DB) *sql.Stmt {
 
 func main() {
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
+	generatorURL = utils.GetEnvironmentVariable("GENERATOR_URL", "localhost:8092")
 	port := utils.GetEnvironmentVariable("PORT", "8082")
 	db, err := sql.Open("postgres", dbSource)
 	if err != nil {
