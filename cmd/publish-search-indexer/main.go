@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -135,11 +134,6 @@ func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elas
 	if err != nil || page.Type == "" {
 		log.Printf("Failed to parse json page data: %+v", event)
 		return
-	}
-
-	if page.Description != nil {
-		isLatest := !strings.Contains(event.FileLocation, "/previous/v")
-		page.Description.LatestRelease = isLatest
 	}
 
 	r := elastic.NewBulkIndexRequest().
