@@ -3,21 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
-	"os"
-	"os/signal"
+	"fmt"
 	"time"
 
+	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
-	"github.com/bsm/sarama-cluster"
+	"github.com/ONSdigital/go-ns/log"
 	"gopkg.in/olivere/elastic.v5"
 )
-
-type FileCompleteEvent struct {
-	FileContent  string `json:"fileContent"`
-	FileLocation string `json:"fileLocation"`
-	CollectionId string `json:"collectionId"`
-}
 
 type Page struct {
 	URI         string           `json:"uri"`
@@ -38,92 +31,91 @@ type PageDescription struct {
 }
 
 func main() {
-
 	kafkaBrokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
-	kafkaConsumerTopic := utils.GetEnvironmentVariable("KAFKA_CONSUMER_TOPIC", "uk.gov.ons.dp.web.complete-file")
-	kafkaConsumerGroup := utils.GetEnvironmentVariable("KAFKA_CONSUMER_GROUP", "uk.gov.ons.dp.web.complete-file.search-index")
+	consumerTopic := utils.GetEnvironmentVariable("KAFKA_CONSUMER_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	elasticSearchNodes := utils.GetEnvironmentVariableAsArray("ELASTIC_SEARCH_NODES", "http://127.0.0.1:9200")
 	elasticSearchIndex := utils.GetEnvironmentVariable("ELASTIC_SEARCH_INDEX", "ons")
+	log.Namespace = "publish-search-indexer"
+	log.Debug("Starting publish search indexer",
+		log.Data{"kafka_brokers": kafkaBrokers,
+			"kafka_consumer_topic": consumerTopic,
+			"elastic_nodes":        elasticSearchNodes,
+			"elastic_index":        elasticSearchIndex})
 
-	log.Print("Environment variable values:")
-	log.Printf(" - KAFKA_ADDR %v", kafkaBrokers)
-	log.Printf(" - KAFKA_CONSUMER_TOPIC %v", kafkaConsumerTopic)
-	log.Printf(" - KAFKA_CONSUMER_GROUP %v", kafkaConsumerGroup)
-	log.Printf(" - ELASTIC_SEARCH_NODES %v", elasticSearchNodes)
-	log.Printf(" - ELASTIC_SEARCH_INDEX %v", elasticSearchIndex)
-
-	log.Print("Creating elastic search client.")
+	// Create elastic search client to the HTTP interface
 	searchClient, err := elastic.NewClient(
 		elastic.SetURL(elasticSearchNodes...),
 		elastic.SetMaxRetries(5),
 		elastic.SetSniff(false))
 	if err != nil {
-		log.Fatalf("An error occured creating the Elastic Search client: %+v", err)
-		return
+		log.ErrorC("Failed to create elastic client", err, log.Data{})
+		panic(err)
 	}
-	log.Print("Elastic Search client Created successfully.")
 
-	bulk, _ := searchClient.BulkProcessor().
+	// To improve indexing performance a BulkProcessor is used to allow multiple web
+	// pages to be uploaded and indexed.
+	bulk, bulkErr := searchClient.BulkProcessor().
 		BulkSize(1000).
 		Workers(4).
 		FlushInterval(time.Millisecond * 1000).
 		After(after).
 		Do(context.Background())
-
 	bulk.Start(context.Background())
-	log.Printf("Creating Kafka consumer.")
-	consumerConfig := cluster.NewConfig()
-	kafkaConsumer, err := cluster.NewConsumer(kafkaBrokers, kafkaConsumerGroup, []string{kafkaConsumerTopic}, consumerConfig)
-	if err != nil {
-		log.Fatalf("An error occured creating the Kafka consumer: %+v", err)
-		return
+	if bulkErr != nil {
+		log.ErrorC("Failed to create bulk processor", bulkErr, log.Data{})
+		panic(bulkErr)
 	}
-	log.Printf("Kafka consumer created.")
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
+	// Setup kafka using consumer groups
+	groupName := "publish-search-index"
+	consumer, consumerErr := kafka.NewConsumerGroup(consumerTopic, groupName)
+	if err != nil {
+		log.ErrorC("Failed to create kafka consumer", consumerErr, log.Data{"topic": consumerTopic,
+			"group": groupName})
+		panic(consumerErr)
+	}
+
 	for {
 		select {
-		case msg := <-kafkaConsumer.Messages():
-			processMessage(msg.Value, bulk, elasticSearchIndex)
-		case <-signals:
-			log.Print("Shutting down...")
-			bulk.Stop()
-			kafkaConsumer.Close()
-			searchClient.Stop()
-			log.Printf("Service stopped")
-			return
+		case consumerMessage := <-consumer.Incoming:
+			err := processMessage(consumerMessage.GetData(), bulk, elasticSearchIndex)
+			if err != nil {
+				log.ErrorC("Failed to process kafka message", err, log.Data{})
+				panic(err)
+			}
+			consumerMessage.Commit()
+		case err := <-consumer.Errors:
+			log.ErrorC("Kafka client error", err, log.Data{})
+			panic(err)
 		}
 	}
 }
 
 func after(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
-		log.Printf("Failed to bulk upload documents : %s", err.Error())
-		if response != nil {
-			log.Printf("Number of documents failed : %d", len(response.Failed()))
-		}
+		log.ErrorC("Failed to upload documents to elastic search", err, log.Data{"response": response})
 	} else {
-		log.Printf("Uploaded %d documents to the ONS index.", len(response.Succeeded()))
 		if response.Errors {
 			for _, failedDocument := range response.Failed() {
-				log.Printf("Error on type %s, reason : %s", failedDocument.Type, failedDocument.Error.Reason)
+				log.ErrorC("Document failed to be indexed", fmt.Errorf(failedDocument.Error.Reason),
+					log.Data{"type": failedDocument.Type})
 			}
+		} else {
+			log.Debug("Uploaded documents to elastic search", log.Data{"uploaded": len(response.Succeeded())})
 		}
 	}
 }
 
-func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elasticSearchIndex string) {
-
+func processMessage(msg []byte, bulkProcessor *elastic.BulkProcessor, elasticSearchIndex string) error {
 	// First deserialise the event to check that its a json file to index.
-	var event FileCompleteEvent
+	var event kafka.FileCompleteMessage
 	err := json.Unmarshal(msg, &event)
 	if err != nil {
-		log.Printf("Failed to parse json event data")
-		return
+		return err
 	}
-	if event.FileContent == "" {
-		return
+	if event.S3Location != "" {
+		// Skip any messages which contain s3 location as it will not contain any json
+		return nil
 	}
 
 	// If the message has JSON content, deserialise it as a page.
@@ -132,18 +124,20 @@ func processMessage(msg []byte, elasticSearchClient *elastic.BulkProcessor, elas
 	// If the page type is nothing it triggers error in elastic search and causes the pipe line
 	// to slow down.
 	if err != nil || page.Type == "" {
-		log.Printf("Failed to parse json page data: %+v", event)
-		return
+		log.Debug("Page will not be indexed as it does not contain a type", log.Data{"message": event})
+		// nil is returned as no all pages can be indexed.
+		return nil
 	}
 
-	r := elastic.NewBulkIndexRequest().
+	request := elastic.NewBulkIndexRequest().
 		Index(elasticSearchIndex).
 		Type(page.Type).
 		Id(page.URI).
 		Doc(page)
 
-	elasticSearchClient.Add(r)
+	bulkProcessor.Add(request)
 	if err != nil {
-		log.Print(err)
+		return fmt.Errorf("Failed to add bulk request : %+v", request)
 	}
+	return nil
 }
