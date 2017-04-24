@@ -6,8 +6,8 @@ import (
 	"net/http"
 )
 
-func GetTaxonomy(w http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadFile("static-taxonomy.json")
+func GetTaxonomy(w http.ResponseWriter, r *http.Request, file string) {
+	data, err := ioutil.ReadFile(file)
 	if err != nil {
 		log.Printf("Error loading static file : %s", err.Error())
 	}

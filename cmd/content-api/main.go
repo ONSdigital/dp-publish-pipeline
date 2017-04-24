@@ -50,6 +50,7 @@ func prepareSQLStatement(sql string, db *sql.DB) *sql.Stmt {
 func main() {
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 	generatorURL = utils.GetEnvironmentVariable("GENERATOR_URL", "localhost:8092")
+	taxonomyFile := utils.GetEnvironmentVariable("TAXONOMY_FILE", "static-taxonomy.json")
 	port := utils.GetEnvironmentVariable("PORT", "8082")
 	db, err := sql.Open("postgres", dbSource)
 	if err != nil {
@@ -63,6 +64,10 @@ func main() {
 	defer findMetaDataStatement.Close()
 	defer findS3DataStatement.Close()
 
+	getTaxonomy := func(w http.ResponseWriter, r *http.Request) {
+		content.GetTaxonomy(w, r, taxonomyFile)
+	}
+
 	log.Printf("Starting Content API on port : %s", port)
 	// Babbage can use two different url types to call the content-api. One which
 	// only contains the endpoint type and another which extends the type and includes
@@ -74,8 +79,8 @@ func main() {
 	http.HandleFunc("/parent", content.GetParent)
 	http.HandleFunc("/resource/", getResource)
 	http.HandleFunc("/resource", getResource)
-	http.HandleFunc("/taxonomy/", content.GetTaxonomy)
-	http.HandleFunc("/taxonomy", content.GetTaxonomy)
+	http.HandleFunc("/taxonomy/", getTaxonomy)
+	http.HandleFunc("/taxonomy", getTaxonomy)
 	http.HandleFunc("/generator/", generatorHandler)
 	http.HandleFunc("/generator", generatorHandler)
 	http.HandleFunc("/export/", exportHandler)
