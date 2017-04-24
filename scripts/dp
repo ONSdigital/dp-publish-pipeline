@@ -184,7 +184,7 @@ while [[ -n $1 ]]; do
 					fi
 					(( filecount == 0 )) || echo -n ,
 					if [[ -n $use_file ]]; then
-						echo $seedlines '{"Location":"file://'"${coll_d}/$i"'","Uri":"'"$i"'"}'
+						echo $seedlines '{"Location":"file://'"${coll_d}$i"'","Uri":"'"$i"'"}'
 					else
 						echo $seedlines '{"Location":"s3://'"${UPSTREAM_S3_BUCKET}/$col$i"'","Uri":"'"$i"'"}'
 					fi
