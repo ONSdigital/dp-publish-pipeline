@@ -1,5 +1,5 @@
 SERVICES?=publish-receiver publish-scheduler publish-metadata publish-tracker publish-data \
-    content-api generator-api publish-search-indexer publish-deleter
+    generator-api publish-search-indexer publish-deleter
 SKIP_SERVICES?=
 UTILS?=decrypt kafka s3 utils
 PACKABLE_BIN=scripts/dp scripts/ennary
