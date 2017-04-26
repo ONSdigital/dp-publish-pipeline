@@ -23,7 +23,6 @@ usage() {
 		--file		- when using --seed, use file://... rather than s3://....
 		--seedlines	- when using --seed, use multiline
 		-p		- run the kafka producer (e.g. dp --seed test0001|dp -p)
-o/dp-search-query
 
 		--resize	- change the message size for kafka
 		--groups	- show the kafka
