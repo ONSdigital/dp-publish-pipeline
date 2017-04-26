@@ -68,8 +68,10 @@ func NewConsumerGroup(topic string, group string) (*ConsumerGroup, error) {
 				select {
 				case msg := <-cg.Consumer.Messages():
 					cg.Incoming <- Message{msg, cg.Consumer}
-				case n := <-cg.Consumer.Notifications():
-					log.Printf("Rebalancing %q group %q - partitions %+v", topic, group, n.Current[topic])
+				case n, more := <-cg.Consumer.Notifications():
+					if more {
+						log.Printf("Rebalancing %q group %q - partitions %+v", topic, group, n.Current[topic])
+					}
 				case <-time.After(tick):
 					cg.Consumer.CommitOffsets()
 				case <-signals:
