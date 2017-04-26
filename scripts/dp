@@ -23,6 +23,7 @@ usage() {
 		--file		- when using --seed, use file://... rather than s3://....
 		--seedlines	- when using --seed, use multiline
 		-p		- run the kafka producer (e.g. dp --seed test0001|dp -p)
+o/dp-search-query
 
 		--resize	- change the message size for kafka
 		--groups	- show the kafka
@@ -209,7 +210,7 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == -c ]]; then log Starting consumer... of $KAFKA_TOPIC; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $KAFKA_TOPIC ${KAFKA_OFFSET:+--partition 0 --offset $KAFKA_OFFSET}
 	elif [[ $arg == -p ]]; then
 		log Starting producer... to $KAFKA_TOPIC
-		kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --producer-property max.request.size=$KAFKA_MAX_BYTES --property max.message.bytes=$KAFKA_MAX_BYTES
+		kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --max-memory-bytes=$KAFKA_MAX_BYTES --producer-property max.request.size=$KAFKA_MAX_BYTES --property max.message.bytes=$KAFKA_MAX_BYTES --producer-property request.timeout.ms=50000
 	elif [[ $arg == --resize ]]; then
 		for c in uk.gov.ons.dp.web.complete-file uk.gov.ons.dp.web.schedule; do
 			log "Setting max size of $KAFKA_MAX_BYTES for $c"

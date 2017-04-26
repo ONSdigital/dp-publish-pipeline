@@ -28,6 +28,11 @@ type PageDescription struct {
 	Source          string   `json:"source"`
 	ReleaseDate     string   `json:"releaseDate"`
 	LatestRelease   bool     `json:"latestRelease"`
+	DatasetID       string   `json:"datasetId"`
+	CDID            string   `json:"cdid"`
+	HeadLine1       string   `json:"headline1"`
+	HeadLine2       string   `json:"headline2"`
+	HeadLine3       string   `json:"headline3"`
 }
 
 func main() {
