@@ -34,6 +34,12 @@ EOM
 while [[ $# -gt 1 ]]; do
     key="$1"
     case $key in
+        --auth)
+            auth_info_login=${2%%:*} # email:password get email
+            auth_info_passw=${2##*:} # email:password get password
+            log "u=[$auth_info_login] p=[$auth_info_passw]"
+            shift # past argument
+            ;;
         -d|--directory)
             DIRECTORY="$2"
             shift # past argument
@@ -69,6 +75,16 @@ while [[ $# -gt 1 ]]; do
     esac
     shift # past argument or value
 done
+
+if [[ -z $TOKEN ]]; then
+  # no token arg, so login to get token... then remove leading/trailing double-quote
+  [[ -z $auth_info_login ]] && die 2 "Bad auth details - need --auth user:pass?"
+  TOKEN=$(curl -sH 'Content-type: application/json' -d '{"email":"'"$auth_info_login"'","password":"'"$auth_info_passw"'"}' $HOST/zebedee/login)
+  TOKEN=${TOKEN%\"}
+  TOKEN=${TOKEN#\"}
+fi
+[[ -z $TOKEN ]] && die 2 "Bad token - auth problem?"
+
 log "Collection   = $collectionName"
 log "DIRECTORY    = $DIRECTORY"
 log "HOST         = $HOST"
