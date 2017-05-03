@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
@@ -16,6 +17,11 @@ type Page struct {
 	URI         string           `json:"uri"`
 	Type        string           `json:"type"`
 	Description *PageDescription `json:"description"`
+	Topics      []string         `json:"topics"`
+}
+
+func (page *Page) isData() bool {
+	return strings.Contains(page.Type, "image")
 }
 
 type PageDescription struct {
@@ -33,6 +39,7 @@ type PageDescription struct {
 	HeadLine1       string   `json:"headline1"`
 	HeadLine2       string   `json:"headline2"`
 	HeadLine3       string   `json:"headline3"`
+	KeyNote         string   `json:"keyNote"`
 }
 
 func main() {
@@ -128,8 +135,8 @@ func processMessage(msg []byte, bulkProcessor *elastic.BulkProcessor, elasticSea
 	err = json.Unmarshal([]byte(event.FileContent), &page)
 	// If the page type is nothing it triggers error in elastic search and causes the pipe line
 	// to slow down.
-	if err != nil || page.Type == "" {
-		log.Debug("Page will not be indexed as it does not contain a type", log.Data{"message": event})
+	if err != nil || page.Type == "" || page.isData() {
+		log.Debug("Page will not be indexed as it does not contain a data type", log.Data{"message": event})
 		// nil is returned as no all pages can be indexed.
 		return nil
 	}
