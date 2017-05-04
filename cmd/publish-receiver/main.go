@@ -35,9 +35,8 @@ func storeData(jsonMessage []byte, s3 *sql.Stmt, meta *sql.Stmt) {
 }
 
 func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
-	lang := getLanguage(dataSet.Uri)
 	results, err := s3.Query(dataSet.CollectionId,
-		resolveURI(dataSet.Uri)+"?lang="+lang,
+		resolveURI(dataSet.Uri),
 		dataSet.S3Location)
 	if err != nil {
 		log.Printf("Error : %s", err.Error())
