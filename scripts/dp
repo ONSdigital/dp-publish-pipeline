@@ -29,6 +29,7 @@ usage() {
 
 		--db		- show the DB table 'schedule', 'schedule_file'
 		--db-wipe	- clear the DB tables: $sql_tables
+		--db-clean	- clear the DB tables: $sql_schedule_tables
 		--db-count	- show the count of rows in the --db-wipe tables, and docs in mongo
 		--db-index	- ensure mongo indexes exist and show them
 EOF
@@ -72,7 +73,8 @@ KAFKA_TOPIC=${KAFKA_TOPIC:-uk.gov.ons.dp.web.schedule} sched_group=publish-sched
 KAFKA_PARTITIONS=${KAFKA_PARTITIONS:-12}
 UPSTREAM_S3_BUCKET=${UPSTREAM_S3_BUCKET:-upstream-content}
 SERVICES=${SERVICES:-publish-metadata:$def_svc_num publish-data:$def_svc_num publish-receiver:$def_svc_num publish-tracker publish-scheduler}
-sql_tables="schedule schedule_file schedule_delete s3data metadata"
+sql_schedule_tables="schedule schedule_file schedule_delete"
+sql_tables="$sql_schedule_tables s3data metadata"
 use_mongo=
 use_file=
 seedlines=-n
@@ -209,7 +211,7 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == -c ]]; then log Starting consumer... of $KAFKA_TOPIC; kafka-console-consumer${k_ext} --bootstrap-server $KAFKA_ADDR --topic $KAFKA_TOPIC ${KAFKA_OFFSET:+--partition 0 --offset $KAFKA_OFFSET}
 	elif [[ $arg == -p ]]; then
 		log Starting producer... to $KAFKA_TOPIC
-		kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --max-memory-bytes=$KAFKA_MAX_BYTES --producer-property max.request.size=$KAFKA_MAX_BYTES --property max.message.bytes=$KAFKA_MAX_BYTES --producer-property request.timeout.ms=50000
+		kafka-console-producer${k_ext} --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --max-memory-bytes=$KAFKA_MAX_BYTES --producer-property max.request.size=$KAFKA_MAX_BYTES --property max.message.bytes=$KAFKA_MAX_BYTES --producer-property timeout.ms=50000
 	elif [[ $arg == --resize ]]; then
 		for c in uk.gov.ons.dp.web.complete-file uk.gov.ons.dp.web.schedule; do
 			log "Setting max size of $KAFKA_MAX_BYTES for $c"
@@ -218,7 +220,8 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --repartition ]]; then
 		kafka-topics$k_ext --alter --zookeeper $ZOOKEEPER --partitions $KAFKA_PARTITIONS --topic $KAFKA_TOPIC
 	elif [[ $arg == --groups ]]; then
-		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do log $(colr_n '36;1' $i); kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe 2>&1|egrep -v '^(Note: This will only.*)?$';done
+		filt_hdr=
+		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do log $(colr_n '36;1' $i); kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe 2>&1|egrep -v '^(Note: This will only.*'"$filt_hdr"')?$';filt_hdr="|TOPIC  *PART.*ID";done
 	elif [[ $arg == --reset ]]; then
 		log "Starting all-consuming consumer of $sched_group group for $KAFKA_TOPIC (Ctrl-C to quit)..."
 		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
@@ -236,6 +239,8 @@ while [[ -n $1 ]]; do
 			sql "select * from s3data"
 			sql "select * from metadata"
 		fi
+	elif [[ $arg == --db-clean  ]]; then
+		for i in $sql_schedule_tables; do echo -n "$i  	"; sql "delete from $i"; done
 	elif [[ $arg == --db-wipe  ]]; then
 		for i in $sql_tables; do echo -n "$i  	"; sql "delete from $i"; done
 		[[ -n $use_mongo ]] && mongo_js 'print(JSON.stringify(db.s3.remove({}),null,8));db.meta.remove({});'
