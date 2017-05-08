@@ -218,7 +218,7 @@ while [[ -n $1 ]]; do
 	elif [[ $arg == --repartition ]]; then
 		kafka-topics$k_ext --alter --zookeeper $ZOOKEEPER --partitions $KAFKA_PARTITIONS --topic $KAFKA_TOPIC
 	elif [[ $arg == --groups ]]; then
-		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do log $i; kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe 2>&1|egrep -v '^(Note: This will only.*)?$';done
+		for i in $(kafka-consumer-groups$k_ext --bootstrap-server $KAFKA_ADDR --list);do log $(colr_n '36;1' $i); kafka-consumer-groups$k_ext --new-consumer --bootstrap-server $KAFKA_ADDR --group $i --describe 2>&1|egrep -v '^(Note: This will only.*)?$';done
 	elif [[ $arg == --reset ]]; then
 		log "Starting all-consuming consumer of $sched_group group for $KAFKA_TOPIC (Ctrl-C to quit)..."
 		kafka-verifiable-consumer$k_ext --broker-list $KAFKA_ADDR --topic $KAFKA_TOPIC --group-id $sched_group --enable-autocommit --reset-policy latest --max-messages 1
