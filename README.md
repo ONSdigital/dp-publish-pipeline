@@ -20,6 +20,24 @@ See the following pages per service
 ### Event messages
 See [Event Message](doc/Messages.md) for details on each topic and type of message sent
 
+### Deployment using nomad
+Before creating the nomad plans the following env variables need exporting.
+
+* ```KAFKA_ADDR``` A list of kafka brokers (separated by ",")
+* ```VAULT_ADDR``` A URL to vault server. Eg. http://127.0.0.1:8200
+* ```S3_URL``` For AWS set this to "s3.amazonaws.com" else for a minio cluster "host:port". For storing web content.
+* ```S3_BUCKET``` The bucket name for web content
+* ```UPSTREAM_S3_URL``` For AWS set this to "s3.amazonaws.com" else for a minio cluster "host:port". For storing collections to be published.
+* ```UPSTREAM_S3_BUCKET``` The bucket name to store collections to be Released
+* ```PUBLISH_DB_ACCESS``` A postgres database URL used for publishing collections
+* ```WEB_DB_ACCESS``` A postgres database URL used for storing released content
+* ```SCHEDULER_VAULT_TOKEN``` A token used to access vault for encryption keys
+* ```ELASTIC_SEARCH_URL``` A URL to a elastic search cluster
+* ```S3_TAR_FILE``` A S3 location containing a tar file with all the publishing binaries built
+
+Once all env variables have been exported run ```make nomad```. This shall generate 7 nomad
+plans for the publish pipeline services.
+
 ### Latest test results (2017 February)
 Machines: AWS M4.large, M3.xlarge, M4.large
 

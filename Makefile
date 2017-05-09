@@ -73,4 +73,36 @@ deploy-archive:
 	archive=$(ARCHIVE); test -n "$$archive" && cd ../dp-setup/ansible && \
 	ansible-playbook $(ANSIBLE_ARGS) -i prototype_hosts prototype.yml -e "s3_bucket=$(S3_BUCKET) s3_archive_file=$(S3_RELEASE_FOLDER)/$$archive archive_file=$$archive"
 
-.PHONY: build package producer test all latest-archive deploy deploy-archive upload-build $(SERVICES)
+latest-archive:
+	@ls publish-$(GOOS)-$(GOARCH)-*.tar.gz | tail -1
+
+# deploy AWS, package on Mac:   make deploy GOOS=linux
+deploy: upload-build deploy-archive
+
+upload-build:
+	@test -n "$(ARCHIVE)" && test -f "$(ARCHIVE)" && aws s3 cp $(ARCHIVE) $(S3_URL)/
+
+deploy-archive:
+	archive=$(ARCHIVE); test -n "$$archive" && cd ../dp-setup/ansible && \
+	ansible-playbook $(ANSIBLE_ARGS) -i prototype_hosts prototype.yml -e "s3_bucket=$(S3_BUCKET) s3_archive_file=$(S3_RELEASE_FOLDER)/$$archive archive_file=$$archive"
+
+nomad:
+		@for t in nomad/*-template.nomad; do			\
+			plan=$${t%-template.nomad}.nomad;	\
+			test -f $$plan && rm $$plan;		\
+			sed	-e 's,NOMAD_DATA_CENTER,$(DATA_CENTER),g'			\
+				-e 's,S3_TAR_FILE_LOCATION,$(S3_TAR_FILE),g'			\
+				-e 's,KAFKA_ADDRESS,$(KAFKA_ADDR),g'		\
+				-e 's,VAULT_ADDRESS,$(VAULT_ADDR),g'		\
+				-e 's,S3_CONTENT_URL,$(S3_URL),g'		\
+				-e 's,S3_CONTENT_BUCKET,$(S3_BUCKET),g'	\
+				-e 's,UPSTREAM_S3_CONTENT_BUCKET,$(UPSTREAM_S3_BUCKET),g'	\
+				-e 's,UPSTREAM_S3_CONTENT_URL,$(UPSTREAM_S3_URL),g'	\
+				-e 's,PUBLISH_DB_ACCESS,$(PUBLISH_DB_ACCESS),g'		\
+				-e 's,WEB_DB_ACCESS,$(WEB_DB_ACCESS),g'		\
+				-e 's,SCHEDULER_VAULT_TOKEN,$(SCHEDULER_VAULT_TOKEN),g'		\
+				-e 's,ELASTIC_SEARCH_URL,$(ELASTIC_SEARCH_URL),g'		\
+				< $$t > $$plan || exit 2;			\
+		done
+
+.PHONY: build package producer test all latest-archive deploy deploy-archive upload-build nomad $(SERVICES)
