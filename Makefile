@@ -1,9 +1,9 @@
 SERVICES?=publish-receiver publish-scheduler publish-metadata publish-tracker publish-data \
-    generator-api publish-search-indexer publish-deleter
+     publish-search-indexer publish-deleter
 SKIP_SERVICES?=
 UTILS?=decrypt kafka s3 utils
 PACKABLE_BIN=scripts/dp scripts/ennary
-PACKABLE_ETC=doc/init.sql
+PACKABLE_ETC=scripts/init.sql
 REMOTE_BIN=bin
 REMOTE_ETC=etc
 ANSIBLE_ARGS?=
@@ -69,19 +69,6 @@ latest-archive:
 deploy: upload-build deploy-archive
 upload-build:
 	@test -n "$(ARCHIVE)" && test -f "$(ARCHIVE)" && aws s3 cp $(ARCHIVE) $(S3_URL)/
-deploy-archive:
-	archive=$(ARCHIVE); test -n "$$archive" && cd ../dp-setup/ansible && \
-	ansible-playbook $(ANSIBLE_ARGS) -i prototype_hosts prototype.yml -e "s3_bucket=$(S3_BUCKET) s3_archive_file=$(S3_RELEASE_FOLDER)/$$archive archive_file=$$archive"
-
-latest-archive:
-	@ls publish-$(GOOS)-$(GOARCH)-*.tar.gz | tail -1
-
-# deploy AWS, package on Mac:   make deploy GOOS=linux
-deploy: upload-build deploy-archive
-
-upload-build:
-	@test -n "$(ARCHIVE)" && test -f "$(ARCHIVE)" && aws s3 cp $(ARCHIVE) $(S3_URL)/
-
 deploy-archive:
 	archive=$(ARCHIVE); test -n "$$archive" && cd ../dp-setup/ansible && \
 	ansible-playbook $(ANSIBLE_ARGS) -i prototype_hosts prototype.yml -e "s3_bucket=$(S3_BUCKET) s3_archive_file=$(S3_RELEASE_FOLDER)/$$archive archive_file=$$archive"
