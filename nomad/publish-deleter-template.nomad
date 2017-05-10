@@ -9,7 +9,7 @@ job "publish-deleter" {
     group "dp-publish-pipeline" {
         task "publish-deleter" {
               artifact {
-                        source = "S3_TAR_FILE_LOCATION"
+                        source = "s3::S3_TAR_FILE_LOCATION"
                         // The Following options are needed if no IAM roles are provided
                         // options {
                         // aws_access_key_id = ""
@@ -23,7 +23,7 @@ job "publish-deleter" {
             }
             driver = "exec"
             config {
-                command = "publish-deleter"
+                command = "local/bin/publish-deleter"
                 args = []
             }
             resources {

@@ -9,7 +9,7 @@ job "publish-tracker" {
     group "dp-publish-pipeline" {
         task "publish-tracker" {
               artifact {
-                        source = "S3_TAR_FILE_LOCATION"
+                        source = "s3::S3_TAR_FILE_LOCATION"
                         // The Following options are needed if no IAM roles are provided
                         // options {
                         // aws_access_key_id = ""
@@ -22,7 +22,7 @@ job "publish-tracker" {
             }
             driver = "exec"
             config {
-                command = "publish-tracker"
+                command = "local/bin/publish-tracker"
                 args = []
             }
             resources {

@@ -9,7 +9,7 @@ job "publish-metadata" {
     group "dp-publish-pipeline" {
         task "publish-metadata" {
               artifact {
-                        source = "S3_TAR_FILE_LOCATION"
+                        source = "s3::S3_TAR_FILE_LOCATION"
                         // The Following options are needed if no IAM roles are provided
                         // options {
                         // aws_access_key_id = ""
@@ -18,14 +18,14 @@ job "publish-metadata" {
              }
             env {
                 KAFKA_ADDR = "KAFKA_ADDRESS"
-                S3_URL = "S3_CONTENT_URL"
-                S3_BUCKET = "S3_CONTENT_BUCKET"
-                UPSTREAM_S3_BUCKET = "UPSTREAM_S3_CONTENT_BUCKET"
-                UPSTREAM_S3_URL = "UPSTREAM_S3_CONTENT_URL"
+                UPSTREAM_S3_BUCKET = "COLLECTION_S3_BUCKET"
+                UPSTREAM_S3_URL = "COLLECTION_S3_URL"
+                UPSTREAM_S3_ACCESS_KEY = "COLLECTION_S3_ACCESS_KEY"
+                UPSTREAM_S3_SECRET_ACCESS_KEY = "COLLECTION_S3_ACCESS_KEY"
             }
             driver = "exec"
             config {
-                command = "publish-metadata"
+                command = "local/bin/publish-metadata"
                 args = []
             }
             resources {

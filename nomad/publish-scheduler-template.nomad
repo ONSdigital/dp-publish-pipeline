@@ -9,7 +9,7 @@ job "publish-scheduler" {
     group "dp-publish-pipeline" {
         task "publish-scheduler" {
               artifact {
-                        source = "S3_TAR_FILE_LOCATION"
+                        source = "s3::S3_TAR_FILE_LOCATION"
                         // The Following options are needed if no IAM roles are provided
                         // options {
                         // aws_access_key_id = ""
@@ -24,7 +24,7 @@ job "publish-scheduler" {
             }
             driver = "exec"
             config {
-                command = "publish-scheduler"
+                command = "local/bin/publish-scheduler"
                 args = []
             }
             resources {
