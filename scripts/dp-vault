@@ -27,8 +27,8 @@ function addAccount {
     # To create periodic tokens you must set period to the max time before a token
     # is revoked. If a service renews the token, the time is reset back to the time
     # set in the period.
-    vault write -f auth/approle/role/$1 display_name=$1 policies=$2 period=10m \
-          secret_id_ttl=10m token_num_uses=0 token_ttl=10m secret_id_num_uses=0
+    vault write -f auth/approle/role/$1 display_name=$1 policies=$2 period=120m \
+          secret_id_ttl=120m token_num_uses=0 token_ttl=120m secret_id_num_uses=0
 }
 
 
