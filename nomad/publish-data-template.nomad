@@ -21,11 +21,11 @@ job "publish-data" {
                 S3_URL = "S3_CONTENT_URL"
                 S3_BUCKET = "S3_CONTENT_BUCKET"
                 S3_ACCESS_KEY = "CONTENT_S3_ACCESS_KEY"
-                S3_SECRET_ACCESS_KEY = "CONTENT_AWS_S3_SECRET_KEY"
+                S3_SECRET_ACCESS_KEY = "CONTENT_S3_SECRET_KEY"
                 UPSTREAM_S3_BUCKET = "COLLECTION_S3_BUCKET"
                 UPSTREAM_S3_URL = "COLLECTION_S3_URL"
                 UPSTREAM_S3_ACCESS_KEY = "COLLECTION_S3_ACCESS_KEY"
-                UPSTREAM_S3_SECRET_ACCESS_KEY = "COLLECTION_S3_ACCESS_KEY"
+                UPSTREAM_S3_SECRET_ACCESS_KEY = "COLLECTION_S3_SECRET_KEY"
             }
             driver = "exec"
             config {
