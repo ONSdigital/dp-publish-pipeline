@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ELASTIC_URL=${ELASTIC_URL:-http://localhost:9200}
 
