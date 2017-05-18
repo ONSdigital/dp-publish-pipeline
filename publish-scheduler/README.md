@@ -33,6 +33,8 @@ Example of an output 'publish-file' message:
 * `VAULT_ADDR` defaults to "http://127.0.0.1:8200"
 * `VAULT_TOKEN` defaults to ""
 * `VAULT_RENEW_TIME` defaults to 5 (Time in minutes)
+* `HEALTHCHECK_ADDR` defaults to ':8080'
+* `HEALTHCHECK_ENDPOINT` defaults to '/healthcheck'
 
 #### Installation
 

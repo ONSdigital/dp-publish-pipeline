@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/ONSdigital/dp-publish-pipeline/health"
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/ONSdigital/dp-publish-pipeline/vault"
@@ -361,6 +363,8 @@ func main() {
 	vaultToken := utils.GetEnvironmentVariable("VAULT_TOKEN", "")
 	vaultAddr := utils.GetEnvironmentVariable("VAULT_ADDR", "http://127.0.0.1:8200")
 	vaultRenewTime, err := utils.GetEnvironmentVariableInt("VAULT_RENEW_TIME", 5)
+	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
+	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
 
 	vaultClient, err := vault.CreateVaultClient(vaultToken, vaultAddr)
 	if err != nil {
@@ -382,6 +386,7 @@ func main() {
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
 	dbMeta.prep("load-incomplete-files", "SELECT schedule_file_id, uri, file_location FROM schedule_file WHERE schedule_id=$1 AND complete_time IS NULL")
 	dbMeta.prep("load-incomplete-deletes", "SELECT schedule_delete_id, uri FROM schedule_delete WHERE schedule_id=$1 AND complete_time IS NULL")
+	dbMeta.prep("healthcheck", "SELECT 1 FROM schedule_delete")
 	if restartGap == 0 {
 		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND start_time IS NULL AND schedule_time <= $1 RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path")
 	} else {
@@ -399,6 +404,7 @@ func main() {
 	deleteProducer := kafka.NewProducer(produceDeleteTopic)
 
 	publishChannel := make(chan scheduleJob)
+	healthChannel := make(chan bool)
 	exitChannel := make(chan bool)
 
 	go func() {
@@ -420,6 +426,12 @@ func main() {
 	}()
 
 	go func() {
+		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, dbMeta.prepped["healthcheck"]))
+		log.Printf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr)
+		log.Panic(http.ListenAndServe(healthCheckAddr, nil))
+	}()
+
+	go func() {
 		for {
 			select {
 			case scheduleMessage := <-scheduleConsumer.Incoming:
@@ -427,6 +439,7 @@ func main() {
 				scheduleMessage.Commit()
 			case publishMessage := <-publishChannel:
 				go publishCollection(publishMessage, fileProducer.Output, deleteProducer.Output, totalProducer.Output)
+			case <-healthChannel:
 			case errorMessage := <-scheduleConsumer.Errors:
 				log.Printf("Aborting: %s", errorMessage)
 				exitChannel <- true
