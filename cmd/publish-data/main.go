@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"path/filepath"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/s3"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/go-ns/log"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -62,6 +62,8 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, s3UpstreamClient, s3Clie
 }
 
 func main() {
+	log.Namespace = "publish-data"
+
 	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
 	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	completeFileTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
@@ -72,21 +74,30 @@ func main() {
 	upstreamEndpoint := utils.GetEnvironmentVariable("UPSTREAM_S3_URL", "localhost:4000")
 	upstreamAccessKeyID := utils.GetEnvironmentVariable("UPSTREAM_S3_ACCESS_KEY", "1234")
 	upstreamSecretAccessKey := utils.GetEnvironmentVariable("UPSTREAM_S3_SECRET_ACCESS_KEY", "1234")
-	s3UpstreamClient := s3.CreateClient(upstreamBucketName, upstreamEndpoint, upstreamAccessKeyID, upstreamSecretAccessKey, false)
+	s3UpstreamClient, err := s3.CreateClient(upstreamBucketName, upstreamEndpoint, upstreamAccessKeyID, upstreamSecretAccessKey, false)
+	if err != nil {
+		log.ErrorC("Could not create s3 upstream client", err, nil)
+		panic(err)
+	}
 
 	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
 	regionName := utils.GetEnvironmentVariable("S3_REGION", "eu-west-1")
 	endpoint := utils.GetEnvironmentVariable("S3_URL", "localhost:4000")
 	accessKeyID := utils.GetEnvironmentVariable("S3_ACCESS_KEY", "1234")
 	secretAccessKey := utils.GetEnvironmentVariable("S3_SECRET_ACCESS_KEY", "1234")
-	s3Client := s3.CreateClient(bucketName, endpoint, accessKeyID, secretAccessKey, false)
+	s3Client, err := s3.CreateClient(bucketName, endpoint, accessKeyID, secretAccessKey, false)
+	if err != nil {
+		log.ErrorC("Could not create s3 client", err, nil)
+		panic(err)
+	}
 	s3Client.CreateBucket(regionName)
 
-	log.Printf("Starting Publish-Data from %q from %q to %q, %q", zebedeeRoot, consumeTopic, completeFileTopic, completeFileFlagTopic)
+	log.Info(fmt.Sprintf("Starting Publish-Data from %q from %q to %q, %q", zebedeeRoot, consumeTopic, completeFileTopic, completeFileFlagTopic), nil)
 
 	consumer, err := kafka.NewConsumerGroup(consumeTopic, "publish-data")
 	if err != nil {
-		log.Panicf("Could not obtain consumer: %s", err)
+		log.ErrorC("Could not obtain consumer", err, nil)
+		panic(err)
 	}
 	completeFileProducer := kafka.NewProducer(completeFileTopic)
 	completeFileFlagProducer := kafka.NewProducer(completeFileFlagTopic)
@@ -94,12 +105,13 @@ func main() {
 		select {
 		case consumerMessage := <-consumer.Incoming:
 			if err := uploadFile(zebedeeRoot, consumerMessage.GetData(), s3UpstreamClient, s3Client, completeFileProducer, completeFileFlagProducer); err != nil {
-				log.Print(err)
+				log.Error(err, nil)
 			} else {
 				consumerMessage.Commit()
 			}
 		case errorMessage := <-consumer.Errors:
-			log.Panicf("Aborting: %s", errorMessage)
+			log.Error(fmt.Errorf("Aborting due to consumer error: %v", errorMessage), nil)
+			panic(errorMessage)
 		}
 	}
 }

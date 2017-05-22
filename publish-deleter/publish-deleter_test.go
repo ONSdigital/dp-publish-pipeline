@@ -2,9 +2,10 @@ package main
 
 import (
 	"database/sql"
-	"log"
+	"fmt"
 	"testing"
 
+	"github.com/ONSdigital/go-ns/log"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -99,7 +100,7 @@ func AddTestData(db *sql.DB) error {
 	insertContentSQL := "INSERT INTO metadata(collection_id, uri, content) VALUES('123', $1, '{}')"
 	statement, err := db.Prepare(insertContentSQL)
 	if err != nil {
-		log.Panicf("Error: Could not prepare statement on database: %s", err.Error())
+		log.ErrorC("Could not prepare statement on database", err, nil)
 	}
 	defer statement.Close()
 	_, sqlErr := statement.Exec("/aboutus?lang=en")
@@ -112,7 +113,7 @@ func FindTestData(db *sql.DB) (int64, error) {
 	insertContentSQL := "SELECT * FROM metadata WHERE collection_id = '123' AND uri LIKE '/aboutus?lang=%'"
 	statement, err := db.Prepare(insertContentSQL)
 	if err != nil {
-		log.Panicf("Error: Could not prepare statement on database: %s", err.Error())
+		log.ErrorC("Could not prepare statement on database", err, nil)
 	}
 	defer statement.Close()
 	row, sqlErr := statement.Exec()
@@ -121,6 +122,6 @@ func FindTestData(db *sql.DB) (int64, error) {
 	}
 
 	rowsAffected, rowErr := row.RowsAffected()
-	log.Printf("%d", rowsAffected)
+	log.Info(fmt.Sprintf("%d", rowsAffected), nil)
 	return rowsAffected, rowErr
 }

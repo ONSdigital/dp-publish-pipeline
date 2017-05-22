@@ -1,10 +1,10 @@
 package kafka
 
 import (
-	"log"
 	"os"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/go-ns/log"
 	"github.com/Shopify/sarama"
 )
 
@@ -36,21 +36,21 @@ func NewConsumer(topic string) Consumer {
 
 	go func() {
 		defer consumer.Close()
-		log.Printf("Started kafka consumer of topic %q", topic)
+		log.Info("Started kafka consumer", log.Data{"topic": topic})
 		for {
 			select {
 			case err := <-consumer.Errors():
-				log.Printf("Error: %s", err.Error())
+				log.Error(err, log.Data{"topic": topic})
 				return
 			default:
 				select {
 				case msg := <-consumer.Messages():
 					messageChannel <- msg.Value
 				case <-signals:
-					log.Printf("Quitting kafka consumer of topic %q", topic)
+					log.Info("Quitting kafka consumer", log.Data{"topic": topic})
 					return
 				case <-closerChannel:
-					log.Printf("Closing kafka consumer of topic %q", topic)
+					log.Info("Closing kafka consumer", log.Data{"topic": topic})
 					return
 				}
 			}

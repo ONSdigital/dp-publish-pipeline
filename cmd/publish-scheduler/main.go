@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,6 +11,8 @@ import (
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/ONSdigital/dp-publish-pipeline/vault"
+
+	"github.com/ONSdigital/go-ns/log"
 
 	"database/sql"
 
@@ -41,7 +42,8 @@ type scheduleJob struct {
 
 func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChannel, totalProducerChannel chan []byte) {
 	if job.collectionId == "" {
-		log.Panicf("Bad message: %v", job)
+		log.ErrorC("No collectionId", fmt.Errorf("job: %v", job), nil)
+		panic("No collectionId")
 	}
 
 	var data []byte
@@ -58,11 +60,12 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 			FileLocation:   job.files[i].Location,
 			Uri:            job.files[i].Uri,
 		}); err != nil {
-			log.Panic(err)
+			log.ErrorC("failed to marshal", err, nil)
+			panic("failed to marshal")
 		}
 		fileProducerChannel <- data
 	}
-	log.Printf("Job %d Collection %q sent %d files", job.scheduleId, job.collectionId, len(job.files))
+	log.Info(fmt.Sprintf("Job %d Collection %q sent %d files", job.scheduleId, job.collectionId, len(job.files)), nil)
 
 	// Send published deletes to the kafka topic
 	for i := 0; i < len(job.urisToDelete); i++ {
@@ -72,24 +75,28 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 			Uri:          job.urisToDelete[i].Uri,
 			CollectionId: job.collectionId,
 		}); err != nil {
-			log.Panic(err)
+			log.ErrorC("cannot marshal", err, nil)
+			panic(err)
 		}
 		deleteProducerChannel <- data
 	}
-	log.Printf("Job %d Collection %q sent %d deletes", job.scheduleId, job.collectionId, len(job.urisToDelete))
+	log.Info(fmt.Sprintf("Job %d Collection %q sent %d deletes", job.scheduleId, job.collectionId, len(job.urisToDelete)), nil)
 }
 
 func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 	var message kafka.ScheduleMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
-		log.Panicf("Failed to parse json: %v", jsonMessage)
+		log.ErrorC("Failed to parse json", err, log.Data{"msg": jsonMessage})
+		panic(err)
 	} else if len(message.CollectionId) == 0 || message.Action == "" {
-		log.Panicf("Empty collectionId/action: %v", jsonMessage)
+		log.Error(fmt.Errorf("Empty collectionId/action"), log.Data{"msg": jsonMessage})
+		panic("Empty collectionId/action")
 	}
 
 	scheduleTime, err := strconv.ParseInt(message.ScheduleTime, 10, 64)
 	if err != nil {
-		log.Panicf("Collection %q Cannot numeric convert: %q", message.CollectionId, message.ScheduleTime)
+		log.Error(fmt.Errorf("Collection %q Cannot numeric convert: %q", message.CollectionId, message.ScheduleTime), log.Data{"msg": message})
+		panic("Cannot numeric convert")
 	}
 	scheduleTime *= 1000 * 1000 * 1000 // convert from epoch (seconds) to epoch-nanoseconds (UnixNano)
 
@@ -111,16 +118,17 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 
 		var deletes []kafka.FileResource
 		for i := 0; i < len(message.UrisToDelete); i++ {
-			log.Println(message.UrisToDelete[i])
+			log.Trace(message.UrisToDelete[i], nil)
 			deletes = append(deletes, kafka.FileResource{Uri: message.UrisToDelete[i]})
 		}
 		newJob.urisToDelete = make([]kafka.FileResource, len(deletes))
 		copy(newJob.urisToDelete, deletes)
 
 		newJob.scheduleId = storeJob(dbMeta, &newJob)
-		log.Printf("Job %d Collection %q scheduled: %d files, %d deletes", newJob.scheduleId, newJob.collectionId, len(newJob.files), len(newJob.urisToDelete))
+		log.Info(fmt.Sprintf("Job %d Collection %q scheduled: %d files, %d deletes", newJob.scheduleId, newJob.collectionId, len(newJob.files), len(newJob.urisToDelete)), nil)
 	} else {
-		log.Panicf("Collection %q No/invalid Action: %v", message.CollectionId, message)
+		log.Error(fmt.Errorf("Collection %q No/invalid action", message.CollectionId), log.Data{"msg": message})
+		panic("No/invalid action")
 	}
 }
 
@@ -136,7 +144,8 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 		rows, err = dbMeta.prepped["select-ready"].Query(epochTime, epochTime-restartGapNano)
 	}
 	if err != nil {
-		log.Panic(err)
+		log.Error(err, nil)
+		panic(err)
 	}
 	defer rows.Close()
 
@@ -147,16 +156,17 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 		)
 
 		if err = rows.Scan(&scheduleId, &startTime, &scheduleTime, &collectionId, &collectionPath); err != nil {
-			log.Panic(err)
+			log.Error(err, nil)
+			panic(err)
 		}
 
 		if maxLaunchPerTick > 0 && launchedThisTick >= maxLaunchPerTick {
-			log.Printf("Job %d Collection %q skip busy - this-tick: %d/%d", scheduleId.Int64, collectionId.String, launchedThisTick, maxLaunchPerTick)
+			log.Info(fmt.Sprintf("Job %d Collection %q skip busy - this-tick: %d/%d", scheduleId.Int64, collectionId.String, launchedThisTick, maxLaunchPerTick), nil)
 			continue
 		}
 		files := loadDataFromDataBase(dbMeta, scheduleId.Int64, false)
 		deletes := loadDataFromDataBase(dbMeta, scheduleId.Int64, true)
-		log.Printf("%d files, %d deletes", len(files), len(deletes))
+		log.Trace(fmt.Sprintf("%d files, %d deletes", len(files), len(deletes)), nil)
 		jobToGo := scheduleJob{
 			scheduleId:     scheduleId.Int64,
 			collectionId:   collectionId.String,
@@ -168,10 +178,10 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 		}
 		publishChannel <- jobToGo
 		launchedThisTick++
-		log.Printf("Job %d Collection %q launch#%d with %d files at time:%d", scheduleId.Int64, collectionId.String, launchedThisTick, len(files), epochTime)
+		log.Info(fmt.Sprintf("Job %d Collection %q launch#%d with %d files at time:%d", scheduleId.Int64, collectionId.String, launchedThisTick, len(files), epochTime), nil)
 	}
 	if verboseTick && launchedThisTick == 0 {
-		log.Printf("No collections ready at %d", epochTime)
+		log.Trace(fmt.Sprintf("No collections ready at %d", epochTime), nil)
 	}
 }
 
@@ -182,7 +192,8 @@ func loadDataFromDataBase(dbMeta dbMetaObj, scheduleId int64, loadDeletes bool) 
 	}
 	rows, err := dbMeta.prepped[sqlStmt].Query(scheduleId)
 	if err != nil {
-		log.Panic(err)
+		log.Error(err, nil)
+		panic(err)
 	}
 	defer rows.Close()
 
@@ -193,18 +204,20 @@ func loadDataFromDataBase(dbMeta dbMetaObj, scheduleId int64, loadDeletes bool) 
 			fileLocation, uri sql.NullString
 		)
 		if err = rows.Scan(&fileId, &uri, &fileLocation); err != nil {
-			log.Panic(err)
+			log.Error(err, nil)
+			panic(err)
 		}
 
 		files = append(files, kafka.FileResource{Id: fileId.Int64, Location: fileLocation.String, Uri: uri.String})
 	}
 	if err = rows.Err(); err != nil {
-		log.Panic(err)
+		log.Error(err, nil)
+		panic(err)
 	}
 	if loadDeletes {
-		log.Printf("Job %d Loaded %d deletes", scheduleId, len(files))
+		log.Info(fmt.Sprintf("Job %d Loaded %d deletes", scheduleId, len(files)), nil)
 	} else {
-		log.Printf("Job %d Loaded %d files", scheduleId, len(files))
+		log.Info(fmt.Sprintf("Job %d Loaded %d files", scheduleId, len(files)), nil)
 	}
 	return files
 }
@@ -219,7 +232,8 @@ func storeJob(dbMeta dbMetaObj, jobObj *scheduleJob) int64 {
 	)
 
 	if txn, err = dbMeta.db.Begin(); err != nil {
-		log.Panic(err)
+		log.Error(err, nil)
+		panic(err)
 	}
 
 	if jobStmt, err = txn.Prepare("INSERT INTO schedule (collection_id, collection_path, schedule_time, start_time, complete_time) VALUES ($1, $2, $3, NULL, NULL) RETURNING schedule_id"); err != nil {
@@ -271,9 +285,11 @@ func storeFile(stmt *sql.Stmt, scheduleId int64, uri, location string) (int64, e
 
 func rollbackAndError(txn *sql.Tx, err error) {
 	if err2 := txn.Rollback(); err2 != nil {
-		log.Panicf("Error during rollback %s (while handling: %s)", err2, err)
+		log.Error(fmt.Errorf("Error during rollback %s (while handling: %s)", err2, err), nil)
+		panic(err)
 	}
-	log.Panic(err)
+	log.Error(err, nil)
+	panic(err)
 }
 
 func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
@@ -285,7 +301,8 @@ func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
 	)
 
 	if txn, err = dbMeta.db.Begin(); err != nil {
-		log.Panic(err)
+		log.Error(err, nil)
+		panic(err)
 	}
 
 	if jobStmt, err = txn.Prepare("DELETE FROM schedule WHERE collection_id=$1 AND schedule_time=$2 AND start_time IS NULL RETURNING schedule_id"); err != nil {
@@ -321,10 +338,10 @@ func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
 			rollbackAndError(txn, fmt.Errorf("Jobs %v Collection %q Cannot delete file-deletes: %s", scheduleIds, collectionId, err))
 		}
 
-		log.Printf("Jobs %v Collection %q at %d CANCELLED", scheduleIds, collectionId, scheduleTime)
+		log.Info(fmt.Sprintf("Jobs %v Collection %q at %d CANCELLED", scheduleIds, collectionId, scheduleTime), nil)
 
 	} else {
-		log.Printf("Job ?? Collection %q at %d not found to cancel", collectionId, scheduleTime)
+		log.Info(fmt.Sprintf("Job ?? Collection %q at %d not found to cancel", collectionId, scheduleTime), nil)
 	}
 
 	if err = txn.Commit(); err != nil {
@@ -335,7 +352,8 @@ func cancelJob(dbMeta dbMetaObj, collectionId string, scheduleTime int64) {
 func getEncryptionKeyFromVault(collectionId string, vaultClient *vault.VaultClient) string {
 	data, err := vaultClient.Read("secret/zebedee-cms/" + collectionId)
 	if err != nil {
-		log.Panicf("Failed to find encryption key : %s", err.Error())
+		log.ErrorC("Failed to find encryption key", err, nil)
+		panic("Failed to find encryption key")
 	}
 	key, ok := data["encryption_key"].(string)
 	if ok {
@@ -348,12 +366,13 @@ func (dbMeta dbMetaObj) prep(tag, sql string) {
 	var err error
 	dbMeta.prepped[tag], err = dbMeta.db.Prepare(sql)
 	if err != nil {
-		log.Panicf("Error: Could not prepare %q statement on database: %s", tag, err.Error())
+		log.ErrorC("Could not prepare statement on database", err, log.Data{"tag": tag})
+		panic("Could not prepare statement on database")
 	}
 }
 
 func main() {
-
+	log.Namespace = "publish-scheduler"
 	scheduleTopic := utils.GetEnvironmentVariable("SCHEDULE_TOPIC", "uk.gov.ons.dp.web.schedule")
 	produceFileTopic := utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	produceDeleteTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.publish-delete")
@@ -368,20 +387,24 @@ func main() {
 
 	vaultClient, err := vault.CreateVaultClient(vaultToken, vaultAddr)
 	if err != nil {
-		log.Panicf("Failed to connect to vault : %s", err.Error())
+		log.ErrorC("Failed to connect to vault", err, nil)
+		panic("Failed to connect to vault")
 	}
 
 	if err != nil {
-		log.Panicf("Failed to parse RESEND_AFTER_QUIET_SECONDS: %s", err)
+		log.ErrorC("Failed to parse RESEND_AFTER_QUIET_SECONDS", err, nil)
+		panic("Failed to parse RESEND_AFTER_QUIET_SECONDS")
 	}
 	restartGapNano := int64(restartGap * 1000 * 1000 * 1000)
 
 	db, err := sql.Open("postgres", dbSource)
 	if err != nil {
-		log.Panicf("DB open error: %s", err.Error())
+		log.ErrorC("DB open error", err, nil)
+		panic("DB open error")
 	}
 	if err = db.Ping(); err != nil {
-		log.Panicf("Error: Could not establish a connection with the database: %s", err.Error())
+		log.ErrorC("Could not establish a connection with the database", err, nil)
+		panic("Could not establish a connection with the database")
 	}
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
 	dbMeta.prep("load-incomplete-files", "SELECT schedule_file_id, uri, file_location FROM schedule_file WHERE schedule_id=$1 AND complete_time IS NULL")
@@ -393,12 +416,13 @@ func main() {
 		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND schedule_time <= $1 AND (start_time IS NULL OR (start_time <= $2 AND NOT EXISTS(SELECT 1 FROM schedule_file sf WHERE s.schedule_id=sf.schedule_id AND sf.complete_time > $2))) RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path")
 	}
 
-	log.Printf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic)
+	log.Info(fmt.Sprintf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic), nil)
 
 	totalProducer := kafka.NewProducer(produceTotalTopic)
 	scheduleConsumer, err := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
 	if err != nil {
-		log.Panicf("Could not obtain consumer: %s", err)
+		log.ErrorC("Could not obtain consumer", err, nil)
+		panic("Could not obtain consumer")
 	}
 	fileProducer := kafka.NewProducer(produceFileTopic)
 	deleteProducer := kafka.NewProducer(produceDeleteTopic)
@@ -419,16 +443,18 @@ func main() {
 		for _ = range tock {
 			err := vaultClient.Renew()
 			if err != nil {
-				log.Panicf("Failed to renew vault token : %s", err.Error())
+				log.ErrorC("Failed to renew vault token", err, nil)
+				panic("Failed to renew vault token")
 			}
-			log.Printf("Renewed vault token")
+			log.Trace("Renewed vault token", nil)
 		}
 	}()
 
 	go func() {
 		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, dbMeta.prepped["healthcheck"]))
-		log.Printf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr)
-		log.Panic(http.ListenAndServe(healthCheckAddr, nil))
+		log.Info(fmt.Sprintf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr), nil)
+		log.ErrorC("healthcheck listener exited", http.ListenAndServe(healthCheckAddr, nil), nil)
+		panic("healthcheck listened exited")
 	}()
 
 	go func() {
@@ -441,12 +467,12 @@ func main() {
 				go publishCollection(publishMessage, fileProducer.Output, deleteProducer.Output, totalProducer.Output)
 			case <-healthChannel:
 			case errorMessage := <-scheduleConsumer.Errors:
-				log.Printf("Aborting: %s", errorMessage)
+				log.Error(fmt.Errorf("Aborting"), log.Data{"messageReceived": errorMessage})
 				exitChannel <- true
 				return
 			}
 		}
 	}()
 	<-exitChannel
-	log.Printf("Service publish scheduler stopped")
+	log.Info("Service publish scheduler stopped", nil)
 }

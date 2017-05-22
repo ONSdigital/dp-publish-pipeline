@@ -4,8 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
+
+	"github.com/ONSdigital/go-ns/log"
 )
 
 type healthMessage struct {
@@ -44,7 +45,8 @@ func NewHealthChecker(healthChannel chan bool, dbStmt *sql.Stmt) func(http.Respo
 				Status: "error",
 				Error:  healthIssue,
 			}); err != nil {
-				log.Panic(err)
+				log.Error(err, nil)
+				panic(err)
 			}
 		}
 

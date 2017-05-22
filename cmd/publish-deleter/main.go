@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 
 	elastic "gopkg.in/olivere/elastic.v5"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/go-ns/log"
 	_ "github.com/lib/pq"
 )
 
@@ -20,12 +21,12 @@ func publishDelete(jsonMessage []byte, deleteStatement *sql.Stmt, elasticClient 
 	if err != nil {
 		return err
 	}
-	log.Printf("%+v", message)
+	log.Trace("delete", log.Data{"msg": message})
 	if message.CollectionId == "" || message.Uri == "" {
 		return errors.New("Missing json parameters")
 	}
 
-	log.Printf("Deleting content at %q from postgres from collection %q", message.Uri, message.CollectionId)
+	log.Trace(fmt.Sprintf("Deleting content at %q from postgres from collection %q", message.Uri, message.CollectionId), nil)
 	_, sqlErr := deleteStatement.Exec(message.Uri + "?lang=%")
 	if sqlErr != nil {
 		return sqlErr
@@ -46,7 +47,8 @@ func prepareSQLDeleteStatement(db *sql.DB) *sql.Stmt {
 	deleteContentSQL := "DELETE FROM metadata WHERE uri LIKE $1"
 	statement, err := db.Prepare(deleteContentSQL)
 	if err != nil {
-		log.Panicf("Error: Could not prepare statement on database: %s", err.Error())
+		log.ErrorC("Could not prepare statement on database", err, nil)
+		panic(err)
 	}
 	return statement
 }
@@ -61,11 +63,14 @@ func createElasticSearchClient() (*elastic.Client, error) {
 }
 
 func main() {
+	log.Namespace = "publish-deleter"
+
 	consumerTopic := utils.GetEnvironmentVariable("DELETE_TOPIC", "uk.gov.ons.dp.web.publish-delete")
 	producerTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	db, err := createPostgresConnection()
 	if err != nil {
-		log.Panicf("Database error : %s", err.Error())
+		log.Error(err, nil)
+		panic(err)
 	}
 	defer db.Close()
 	deleteStatement := prepareSQLDeleteStatement(db)
@@ -73,26 +78,29 @@ func main() {
 
 	elasticClient, err := createElasticSearchClient()
 	if err != nil {
-		log.Fatalf("An error occured creating the Elastic Search client: %s", err.Error())
-		return
+		log.ErrorC("error creating the Elastic Search client", err, nil)
+		panic(err)
 	}
 
-	log.Printf("Starting Publish-deletes")
+	log.Info("Starting Publish-deletes", nil)
 	consumer, err := kafka.NewConsumerGroup(consumerTopic, "publish-deletes")
 	if err != nil {
-		log.Panicf("Could not obtain consumer: %s", err)
+		log.Error(err, nil)
+		panic(err)
 	}
 	producer := kafka.NewProducer(producerTopic)
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
 			if err := publishDelete(consumerMessage.GetData(), deleteStatement, elasticClient, producer.Output); err != nil {
-				log.Print(err)
+				log.Error(err, nil)
+				panic(err)
 			} else {
 				consumerMessage.Commit()
 			}
 		case errorMessage := <-consumer.Errors:
-			log.Panicf("Aborting: %s", errorMessage)
+			log.Error(fmt.Errorf("Aborting: %+v", errorMessage), nil)
+			panic("got consumer error")
 		}
 	}
 }

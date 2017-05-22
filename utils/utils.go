@@ -2,11 +2,12 @@ package utils
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/ONSdigital/go-ns/log"
 )
 
 type Page struct {
@@ -53,7 +54,7 @@ func GetUri(data []byte) string {
 	var page Page
 	err := json.Unmarshal(data, &page)
 	if err != nil {
-		log.Printf("Error unmarshalling json to Page : %s", err.Error())
+		log.ErrorC("unmarshalling json to Page", err, nil)
 	}
 	return page.Uri
 }
@@ -62,7 +63,7 @@ func GetType(data []byte) string {
 	var page Page
 	err := json.Unmarshal(data, &page)
 	if err != nil {
-		log.Printf("Error unmarshalling json to Page : %s", err.Error())
+		log.ErrorC("unmarshalling json to Page", err, nil)
 	}
 	return page.Type
 }

@@ -2,11 +2,11 @@ package kafka
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/go-ns/log"
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
 )
@@ -58,11 +58,11 @@ func NewConsumerGroup(topic string, group string) (*ConsumerGroup, error) {
 
 	go func() {
 		defer cg.Consumer.Close()
-		log.Printf("Started kafka consumer of topic %q group %q", topic, group)
+		log.Info(fmt.Sprintf("Started kafka consumer of topic %q group %q", topic, group), nil)
 		for {
 			select {
 			case err := <-cg.Consumer.Errors():
-				log.Printf("Error: %s", err.Error())
+				log.Error(err, nil)
 				cg.Errors <- err
 			default:
 				select {
@@ -70,15 +70,15 @@ func NewConsumerGroup(topic string, group string) (*ConsumerGroup, error) {
 					cg.Incoming <- Message{msg, cg.Consumer}
 				case n, more := <-cg.Consumer.Notifications():
 					if more {
-						log.Printf("Rebalancing %q group %q - partitions %+v", topic, group, n.Current[topic])
+						log.Trace("Rebalancing group", log.Data{"topic": topic, "group": group, "partitions": n.Current[topic]})
 					}
 				case <-time.After(tick):
 					cg.Consumer.CommitOffsets()
 				case <-signals:
-					log.Printf("Quitting kafka consumer of topic %q group %q", topic, group)
+					log.Info(fmt.Sprintf("Quitting kafka consumer of topic %q group %q", topic, group), nil)
 					return
 				case <-cg.Closer:
-					log.Printf("Closing kafka consumer of topic %q group %q", topic, group)
+					log.Info(fmt.Sprintf("Closing kafka consumer of topic %q group %q", topic, group), nil)
 					return
 				}
 			}

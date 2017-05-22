@@ -10,6 +10,7 @@ ANSIBLE_ARGS?=
 ARCHIVE?=$(shell make $(MAKEFLAGS) latest-archive)
 HASH?=$(shell make hash)
 CMD_DIR?=cmd
+HUMAN_LOG?=
 
 S3_BUCKET?=dp-publish-content-test
 S3_RELEASE_FOLDER?=release

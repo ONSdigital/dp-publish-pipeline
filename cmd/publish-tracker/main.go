@@ -3,12 +3,13 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/go-ns/log"
 
 	_ "github.com/lib/pq"
 )
@@ -26,7 +27,8 @@ type dbMetaObj struct {
 func checkForCompletedJobs(dbMeta dbMetaObj, producer kafka.Producer) {
 	rows, err := dbMeta.prepped["find-completed-jobs"].Query()
 	if err != nil {
-		log.Panic(err)
+		log.Error(err, nil)
+		panic(err)
 	}
 	defer rows.Close()
 
@@ -35,14 +37,15 @@ func checkForCompletedJobs(dbMeta dbMetaObj, producer kafka.Producer) {
 
 	for rows.Next() {
 		if err := rows.Scan(&scheduleId, &deletesRemaining, &filesRemaining); err != nil {
-			log.Panic(err)
+			log.Error(err, nil)
+			panic(err)
 		}
 		if deletesRemaining.Int64 == 0 && filesRemaining.Int64 == 0 {
 			duration, collectionId, err := markJobComplete(dbMeta, producer, scheduleId.Int64, completedTime)
 			if err != nil {
-				log.Printf("WARNING: %s", err)
+				log.Error(err, nil)
 			} else {
-				log.Printf("Job %d Collection %q completes in %s", scheduleId.Int64, collectionId, duration)
+				log.Info(fmt.Sprintf("Job %d Collection %q completes in %s", scheduleId.Int64, collectionId, duration), nil)
 			}
 		}
 	}
@@ -56,7 +59,8 @@ func markJobComplete(dbMeta dbMetaObj, producer kafka.Producer, scheduleId, comp
 		if err == sql.ErrNoRows {
 			return 0, "", fmt.Errorf("Job %d already complete?", scheduleId)
 		}
-		log.Panic(err)
+		log.Error(err, nil)
+		panic(err)
 	}
 
 	data, _ := json.Marshal(kafka.CollectionCompleteMessage{scheduleId, collectionId.String})
@@ -68,21 +72,23 @@ func markJobComplete(dbMeta dbMetaObj, producer kafka.Producer, scheduleId, comp
 func markFileComplete(jsonMessage []byte, dbMeta dbMetaObj) {
 	var file kafka.FileCompleteFlagMessage
 	if err := json.Unmarshal(jsonMessage, &file); err != nil {
-		log.Printf("Failed to parse json message")
+		log.ErrorC("Failed to parse json message", err, log.Data{"json": jsonMessage})
 		return
 	}
 	if file.ScheduleId == 0 || (file.FileId == 0 && file.DeleteId == 0) {
-		log.Printf("Json message is missing fields : %s", string(jsonMessage))
+		log.Error(errors.New("Json message is missing fields"), log.Data{"json": string(jsonMessage)})
 		return
 	}
 
 	if file.FileId != 0 {
 		if _, err := dbMeta.prepped["update-completed-file"].Exec(file.FileId, time.Now().UnixNano()); err != nil {
-			log.Panicf("Error: Could not update file %d : %s", file.FileId, err)
+			log.ErrorC("Could not update file", err, log.Data{"fileId": file.FileId})
+			panic(err)
 		}
 	} else if file.DeleteId != 0 {
 		if _, err := dbMeta.prepped["update-delete-file"].Exec(file.DeleteId, time.Now().UnixNano()); err != nil {
-			log.Panicf("Error: Could not update delete %d : %s", file.DeleteId, err)
+			log.ErrorC("Could not update delete", err, log.Data{"deleteId": file.DeleteId})
+			panic(err)
 		}
 	}
 }
@@ -91,26 +97,31 @@ func (dbMeta dbMetaObj) prep(tag, sql string) {
 	var err error
 	dbMeta.prepped[tag], err = dbMeta.db.Prepare(sql)
 	if err != nil {
-		log.Panicf("Error: Could not prepare %q statement on database: %s", tag, err.Error())
+		log.ErrorC("Could not prepare statement on database", err, log.Data{"tag": tag})
+		panic(err)
 	}
 }
 
 func main() {
+	log.Namespace = "publish-tracker"
 	completeFileTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	completeCollectionTopic := utils.GetEnvironmentVariable("COMPLETE_TOPIC", "uk.gov.ons.dp.web.complete")
 	maxConcurrentFileCompletes, err := utils.GetEnvironmentVariableInt("MAX_CONCURRENT_FILE_COMPLETES", 40)
 	if err != nil {
-		log.Fatal("Cannot convert MAX_CONCURRENT_FILE_COMPLETES to integer")
+		log.ErrorC("Cannot convert MAX_CONCURRENT_FILE_COMPLETES to integer", err, nil)
+		panic(err)
 	}
-	log.Printf("Starting publish tracker of %q to %q", completeFileTopic, completeCollectionTopic)
+	log.Info(fmt.Sprintf("Starting publish tracker of %q to %q", completeFileTopic, completeCollectionTopic), nil)
 
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 	db, err := sql.Open("postgres", dbSource)
 	if err != nil {
-		log.Panicf("DB open error: %s", err.Error())
+		log.ErrorC("DB open error", err, nil)
+		panic(err)
 	}
 	if err = db.Ping(); err != nil {
-		log.Panicf("Error: Could not establish a connection with the database: %s", err.Error())
+		log.ErrorC("Could not establish a connection with the database", err, nil)
+		panic(err)
 	}
 	dbMeta := dbMetaObj{db: db, prepped: make(map[string]*sql.Stmt)}
 	dbMeta.prep("find-completed-jobs", "SELECT schedule.schedule_id, (SELECT count(*) FROM schedule_delete WHERE schedule.schedule_id = schedule_delete.schedule_id AND schedule_delete.complete_time IS NULL) AS deletes_remaining, (SELECT count(*) FROM schedule_file WHERE schedule.schedule_id = schedule_file.schedule_id AND schedule_file.complete_time IS NULL) AS files_remaining FROM schedule WHERE complete_time is NULL GROUP BY schedule.schedule_id")
@@ -120,7 +131,8 @@ func main() {
 
 	fileConsumer, err := kafka.NewConsumerGroup(completeFileTopic, "publish-tracker")
 	if err != nil {
-		log.Panicf("Could not obtain consumer: %s", err)
+		log.ErrorC("Could not obtain consumer", err, nil)
+		panic(err)
 	}
 	producer := kafka.NewProducer(completeCollectionTopic)
 
@@ -143,7 +155,8 @@ func main() {
 				consumerMessage.Commit()
 			}()
 		case errorMessage := <-fileConsumer.Errors:
-			log.Panicf("Aborting: %s", errorMessage)
+			log.Error(errors.New("Aborting after consumer error"), log.Data{"msg": errorMessage})
+			panic("Aborting after consumer error")
 		}
 	}
 }
