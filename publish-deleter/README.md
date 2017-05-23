@@ -32,6 +32,9 @@ Produces the following message when a file has been successfully removed.
 * `PUBLISH_DELETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete-file-flag""
 * `DB_ACCESS` defaults to "user=dp dbname=dp sslmode=disable"
 
+* `HEALTHCHECK_ADDR` defaults to ':8080'
+* `HEALTHCHECK_ENDPOINT` defaults to '/healthcheck'
+
 ### Race conditions
 As ordering is not guaranteed, it is possible insert then delete or deci versa to happen.
 This can lead to lost content. But the mechanising in place for Zebedee stops this race

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/ONSdigital/dp-publish-pipeline/health"
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/ONSdigital/go-ns/log"
@@ -47,6 +49,8 @@ func main() {
 	consumerTopic := utils.GetEnvironmentVariable("KAFKA_CONSUMER_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	elasticSearchNodes := utils.GetEnvironmentVariableAsArray("ELASTIC_SEARCH_NODES", "http://127.0.0.1:9200")
 	elasticSearchIndex := utils.GetEnvironmentVariable("ELASTIC_SEARCH_INDEX", "ons")
+	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
+	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
 	log.Namespace = "publish-search-indexer"
 	log.Debug("Starting publish search indexer",
 		log.Data{"kafka_brokers": kafkaBrokers,
@@ -87,6 +91,14 @@ func main() {
 		panic(consumerErr)
 	}
 
+	healthChannel := make(chan bool)
+	go func() {
+		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, nil))
+		log.Info(fmt.Sprintf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr), nil)
+		log.ErrorC("healthcheck listener exited", http.ListenAndServe(healthCheckAddr, nil), nil)
+		panic("healthcheck listener exited")
+	}()
+
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
@@ -99,6 +111,7 @@ func main() {
 		case err := <-consumer.Errors:
 			log.ErrorC("Kafka client error", err, log.Data{})
 			panic(err)
+		case <-healthChannel:
 		}
 	}
 }

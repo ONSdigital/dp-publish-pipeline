@@ -28,6 +28,9 @@ Test data examples for 'uk.gov.ons.dp.web.complete' topic
 * `KAFKA_ADDR` defaults to "localhost:9092"
 * `MAX_CONCURRENT_FILE_COMPLETES` (default: 40) limit concurrent file-complete messages in progress
 
+* `HEALTHCHECK_ADDR` defaults to ':8080'
+* `HEALTHCHECK_ENDPOINT` defaults to '/healthcheck'
+
 #### Running a test environment
 
 Need to run these, only once:

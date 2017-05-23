@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 
 	elastic "gopkg.in/olivere/elastic.v5"
 
+	"github.com/ONSdigital/dp-publish-pipeline/health"
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/ONSdigital/go-ns/log"
@@ -43,11 +45,10 @@ func createPostgresConnection() (*sql.DB, error) {
 	return db, err
 }
 
-func prepareSQLDeleteStatement(db *sql.DB) *sql.Stmt {
-	deleteContentSQL := "DELETE FROM metadata WHERE uri LIKE $1"
-	statement, err := db.Prepare(deleteContentSQL)
+func prepareSQLStatement(sql string, db *sql.DB) *sql.Stmt {
+	statement, err := db.Prepare(sql)
 	if err != nil {
-		log.ErrorC("Could not prepare statement on database", err, nil)
+		log.ErrorC("Could not prepare statement on database", err, log.Data{"sql": sql})
 		panic(err)
 	}
 	return statement
@@ -67,14 +68,20 @@ func main() {
 
 	consumerTopic := utils.GetEnvironmentVariable("DELETE_TOPIC", "uk.gov.ons.dp.web.publish-delete")
 	producerTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
+	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
+	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
+
 	db, err := createPostgresConnection()
 	if err != nil {
 		log.Error(err, nil)
 		panic(err)
 	}
 	defer db.Close()
-	deleteStatement := prepareSQLDeleteStatement(db)
+
+	deleteStatement := prepareSQLStatement("DELETE FROM metadata WHERE uri LIKE $1", db)
 	defer deleteStatement.Close()
+	healthCheckSqlStmt := prepareSQLStatement("SELECT 1 FROM metadata", db)
+	defer healthCheckSqlStmt.Close()
 
 	elasticClient, err := createElasticSearchClient()
 	if err != nil {
@@ -82,7 +89,16 @@ func main() {
 		panic(err)
 	}
 
-	log.Info("Starting Publish-deletes", nil)
+	log.Info("Starting Publish-deleter", nil)
+
+	healthChannel := make(chan bool)
+	go func() {
+		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, healthCheckSqlStmt))
+		log.Info(fmt.Sprintf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr), nil)
+		log.ErrorC("healthcheck listener exited", http.ListenAndServe(healthCheckAddr, nil), nil)
+		panic("healthcheck listener exited")
+	}()
+
 	consumer, err := kafka.NewConsumerGroup(consumerTopic, "publish-deletes")
 	if err != nil {
 		log.Error(err, nil)
@@ -101,6 +117,7 @@ func main() {
 		case errorMessage := <-consumer.Errors:
 			log.Error(fmt.Errorf("Aborting: %+v", errorMessage), nil)
 			panic("got consumer error")
+		case <-healthChannel:
 		}
 	}
 }

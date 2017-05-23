@@ -30,6 +30,9 @@ Example of a output message:
 * CONSUME_TOPIC defaults to uk.gov.ons.dp.web.publish-file
 * PRODUCE_TOPIC defaults to uk.gov.ons.dp.web.complete-file
 
+* `HEALTHCHECK_ADDR` defaults to ':8080'
+* `HEALTHCHECK_ENDPOINT` defaults to '/healthcheck'
+
 #### Running a test environment
 * Install ruby using ```brew install ruby```
 * Install fake s3 server ```gem install fakes3```

@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/decrypt"
+	"github.com/ONSdigital/dp-publish-pipeline/health"
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/s3"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -68,6 +70,10 @@ func main() {
 	completeFileTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 
+	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
+	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
+	healthChannel := make(chan bool)
+
 	upstreamBucketName := utils.GetEnvironmentVariable("UPSTREAM_S3_BUCKET", "upstream-content")
 	//upstreamRegionName := utils.GetEnvironmentVariable("UPSTREAM_S3_REGION", "eu-west-2")
 	upstreamEndpoint := utils.GetEnvironmentVariable("UPSTREAM_S3_URL", "localhost:4000")
@@ -87,6 +93,14 @@ func main() {
 	}
 	fileProducer := kafka.NewProducer(completeFileTopic)
 	flagProducer := kafka.NewProducer(completeFileFlagTopic)
+
+	go func() {
+		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, nil))
+		log.Info(fmt.Sprintf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr), nil)
+		log.ErrorC("healthcheck listener exited", http.ListenAndServe(healthCheckAddr, nil), nil)
+		panic("healthcheck listener exited")
+	}()
+
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
@@ -97,6 +111,7 @@ func main() {
 		case errorMessage := <-consumer.Errors:
 			log.Error(fmt.Errorf("Aborting: %s", errorMessage), nil)
 			panic(errorMessage)
+		case <-healthChannel:
 		}
 	}
 }

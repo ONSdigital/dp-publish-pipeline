@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 
+	"github.com/ONSdigital/dp-publish-pipeline/health"
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
 	"github.com/ONSdigital/go-ns/log"
@@ -98,6 +100,8 @@ func prep(sql string, db *sql.DB) *sql.Stmt {
 func main() {
 	log.Namespace = "publish-receiver"
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
+	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
+	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 
 	fileCompleteConsumer, err := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
@@ -124,7 +128,17 @@ func main() {
 	metaStatement := prep(metaUpsert, db)
 	defer metaStatement.Close()
 
+	healthChannel := make(chan bool)
+	healthCheckSqlPrep := prep("SELECT 1 FROM metadata", db)
+
 	log.Info("Started publish receiver", log.Data{"topic": fileCompleteTopic})
+
+	go func() {
+		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, healthCheckSqlPrep))
+		log.Info(fmt.Sprintf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr), nil)
+		log.ErrorC("healthcheck listener exited", http.ListenAndServe(healthCheckAddr, nil), nil)
+		panic("healthcheck listener exited")
+	}()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
@@ -139,6 +153,7 @@ func main() {
 		case <-signals:
 			log.Info("Service stopped", nil)
 			return
+		case <-healthChannel:
 		}
 	}
 }

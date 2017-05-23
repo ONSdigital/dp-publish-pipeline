@@ -17,6 +17,9 @@ Examples of messages
 * `COMPLETE_TOPIC` defaults to "uk.gov.ons.dp.web.complete"
 * `KAFKA_ADDR` defaults to "localhost:9092"
 
+* `HEALTHCHECK_ADDR` defaults to ':8080'
+* `HEALTHCHECK_ENDPOINT` defaults to '/healthcheck'
+
 
 #### Running a test environment
 * Install kafka server ```brew install kafka```

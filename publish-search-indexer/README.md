@@ -12,6 +12,8 @@ the ONS website.
 | FILE_COMPLETE_TOPIC  | uk.gov.ons.dp.web.complete-file                | The Kafka topic to consume messages from
 | ELASTIC_SEARCH_NODES | http://127.0.0.1:9200                          | The Elastic Search node addresses comma separated
 | ELASTIC_SEARCH_INDEX | ons                                            | The Elastic Search index to update
+| HEALTHCHECK_ADDR     | :8080                                          | The HTTP listen address for the healthcheck endpoint
+| HEALTHCHECK_ENDPOINT | /healthcheck                                   | The HTTP endpoint for the healthcheck response
 
 #### Running a test environment
 

@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"path/filepath"
 	"strings"
 
 	"github.com/ONSdigital/dp-publish-pipeline/decrypt"
+	"github.com/ONSdigital/dp-publish-pipeline/health"
 	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/s3"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
@@ -69,6 +71,9 @@ func main() {
 	completeFileTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 
+	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
+	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
+
 	upstreamBucketName := utils.GetEnvironmentVariable("UPSTREAM_S3_BUCKET", "upstream-content")
 	//upstreamRegionName := utils.GetEnvironmentVariable("UPSTREAM_S3_REGION", "eu-west-2")
 	upstreamEndpoint := utils.GetEnvironmentVariable("UPSTREAM_S3_URL", "localhost:4000")
@@ -94,6 +99,14 @@ func main() {
 
 	log.Info(fmt.Sprintf("Starting Publish-Data from %q from %q to %q, %q", zebedeeRoot, consumeTopic, completeFileTopic, completeFileFlagTopic), nil)
 
+	healthChannel := make(chan bool)
+	go func() {
+		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, nil))
+		log.Info(fmt.Sprintf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr), nil)
+		log.ErrorC("healthcheck listener exited", http.ListenAndServe(healthCheckAddr, nil), nil)
+		panic("healthcheck listener exited")
+	}()
+
 	consumer, err := kafka.NewConsumerGroup(consumeTopic, "publish-data")
 	if err != nil {
 		log.ErrorC("Could not obtain consumer", err, nil)
@@ -112,6 +125,7 @@ func main() {
 		case errorMessage := <-consumer.Errors:
 			log.Error(fmt.Errorf("Aborting due to consumer error: %v", errorMessage), nil)
 			panic(errorMessage)
+		case <-healthChannel:
 		}
 	}
 }

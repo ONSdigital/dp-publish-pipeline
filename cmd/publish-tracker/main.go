@@ -155,7 +155,7 @@ func main() {
 		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, dbMeta.prepped["healthcheck"]))
 		log.Info(fmt.Sprintf("Listening for %s on %s", healthCheckEndpoint, healthCheckAddr), nil)
 		log.ErrorC("healthcheck listener exited", http.ListenAndServe(healthCheckAddr, nil), nil)
-		panic("healthcheck listened exited")
+		panic("healthcheck listener exited")
 	}()
 
 	for {
