@@ -26,6 +26,7 @@ job "publish-data" {
                 UPSTREAM_S3_URL = "COLLECTION_S3_URL"
                 UPSTREAM_S3_ACCESS_KEY = "COLLECTION_S3_ACCESS_KEY"
                 UPSTREAM_S3_SECRET_ACCESS_KEY = "COLLECTION_S3_SECRET_KEY"
+                HEALTHCHECK_PORT = "${NOMAD_PORT_http}"
             }
             driver = "exec"
             config {
@@ -35,9 +36,12 @@ job "publish-data" {
             resources {
                 cpu = 450
                 memory = 300
+                network {
+                    port "http" {}
+                }
             }
             service {
-                port = "HEALTHCHECK_PORT"
+                port = "${NOMAD_PORT_http}"
                 check {
                     type     = "http"
                     path     = "HEALTHCHECK_ENDPOINT"

@@ -21,6 +21,7 @@ job "publish-scheduler" {
                 DB_ACCESS = "PUBLISH_DB_ACCESS"
                 VAULT_ADDR = "VAULT_ADDRESS"
                 VAULT_TOKEN = "SCHEDULER_VAULT_TOKEN"
+                HEALTHCHECK_PORT = "${NOMAD_PORT_http}"
             }
             driver = "exec"
             config {
@@ -30,9 +31,12 @@ job "publish-scheduler" {
             resources {
                 cpu = 450
                 memory = 300
+                network {
+                    port "http" {}
+                }
             }
             service {
-                port = "HEALTHCHECK_PORT"
+                port = "${NOMAD_PORT_http}"
                 check {
                     type     = "http"
                     path     = "HEALTHCHECK_ENDPOINT"

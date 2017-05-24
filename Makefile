@@ -75,8 +75,7 @@ deploy-archive:
 	ansible-playbook $(ANSIBLE_ARGS) -i prototype_hosts prototype.yml -e "s3_bucket=$(S3_BUCKET) s3_archive_file=$(S3_RELEASE_FOLDER)/$$archive archive_file=$$archive"
 
 nomad:
-		@healthcheck_port=$${HEALTHCHECK_ADDR#*:};	\
-		for t in nomad/*-template.nomad; do			\
+		@for t in nomad/*-template.nomad; do			\
 			plan=$${t%-template.nomad}.nomad;	\
 			test -f $$plan && rm $$plan;		\
 			sed	-e 's,NOMAD_DATA_CENTER,$(DATA_CENTER),g'			\
@@ -95,7 +94,6 @@ nomad:
 				-e 's,CONTENT_S3_SECRET_KEY,$(S3_SECRET_ACCESS_KEY),g'		\
 				-e 's,COLLECTION_S3_ACCESS_KEY,$(UPSTREAM_S3_ACCESS_KEY),g'		\
 				-e 's,COLLECTION_S3_SECRET_KEY,$(UPSTREAM_S3_SECRET_ACCESS_KEY),g'		\
-				-e 's,HEALTHCHECK_PORT,'$$healthcheck_port',g'				\
 				-e 's,HEALTHCHECK_ENDPOINT,$(HEALTHCHECK_ENDPOINT),g'			\
 				< $$t > $$plan || exit 2;			\
 		done
