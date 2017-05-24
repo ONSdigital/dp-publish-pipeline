@@ -36,6 +36,15 @@ job "publish-data" {
                 cpu = 450
                 memory = 300
             }
+            service {
+                port = "HEALTHCHECK_PORT"
+                check {
+                    type     = "http"
+                    path     = "HEALTHCHECK_ENDPOINT"
+                    interval = "10s"
+                    timeout  = "2s"
+                }
+            }
         }
   }
 }
