@@ -35,7 +35,7 @@ job "publish-deleter" {
                 }
             }
             service {
-                port = "${NOMAD_PORT_http}"
+                port = "http"
                 check {
                     type     = "http"
                     path     = "HEALTHCHECK_ENDPOINT"
