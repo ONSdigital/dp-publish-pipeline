@@ -34,7 +34,5 @@ Test data examples for 'uk.gov.ons.dp.web.complete' topic
 #### Running a test environment
 
 Need to run these, only once:
-* Install kafka server ```brew install kafka```
 * install postgres server ```brew install postgres```
 * Run the following SQL script at `doc/init.sql`
-* Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```

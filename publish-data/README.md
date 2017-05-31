@@ -16,11 +16,13 @@ Example of a output message:
 
 #### Environment variables
 * S3_URL defaults to localhost:4000
+* S3_SECURE defaults to 1 (true) - use 0 (false) if not using secure connection
 * S3_ACCESS_KEY defaults to 1234
 * S3_SECRET_ACCESS_KEY defaults to 1234
 * S3_BUCKET defaults to static_content
 
 * UPSTREAM_S3_URL defaults to localhost:4000 (UPSTREAM_* items represent where zebedee puts encrypted collections)
+* UPSTREAM_S3_SECURE defaults to 1 (true) - use 0 (false) if not using secure connection
 * UPSTREAM_S3_ACCESS_KEY defaults to 1234
 * UPSTREAM_S3_SECRET_ACCESS_KEY defaults to 1234
 * UPSTREAM_S3_BUCKET defaults to `upstream-content`
@@ -37,7 +39,5 @@ Example of a output message:
 * Install ruby using ```brew install ruby```
 * Install fake s3 server ```gem install fakes3```
 * Start fake s3 server ```mkdir -p /tmp/s3  && fakes3 -r /tmp/s3 -p 4000```
-* Install kafka server ```brew install kafka```
-* Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```
 
 ### Notes
