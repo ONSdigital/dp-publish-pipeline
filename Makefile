@@ -10,19 +10,42 @@ ANSIBLE_ARGS?=
 ARCHIVE?=$(shell make $(MAKEFLAGS) latest-archive)
 HASH?=$(shell make hash)
 CMD_DIR?=cmd
-HUMAN_LOG?=
+HEALTHCHECK_ENDPOINT?=/healthcheck
+DATA_CENTER?=dc1
+DEV?=
 
 S3_BUCKET?=dp-publish-content-test
 S3_RELEASE_FOLDER?=release
 S3_URL?=s3://$(S3_BUCKET)/$(S3_RELEASE_FOLDER)
 
+ifdef DEV
+S3_SECURE?=0
+UPSTREAM_S3_SECURE?=0
+HUMAN_LOG?=1
+else
+S3_SECURE?=1
+UPSTREAM_S3_SECURE?=1
+HUMAN_LOG?=
+endif
+
 export GOOS?=$(shell go env GOOS)
 export GOARCH?=$(shell go env GOARCH)
+thisOS:=$(shell uname -s)
+
+ifeq ($(thisOS),Darwin)
+SED?=gsed
+else
+SED?=sed
+endif
 
 BUILD=build
 BUILD_ARCH=$(BUILD)/$(GOOS)-$(GOARCH)
 DATE:=$(shell date '+%Y%m%d-%H%M%S')
 TGZ_FILE=publish-$(GOOS)-$(GOARCH)-$(DATE)-$(HASH).tar.gz
+
+NOMAD?=
+NOMAD_SRC_DIR?=nomad
+NOMAD_PLAN_TARGET?=$(BUILD)
 
 build:
 	@mkdir -p $(BUILD_ARCH) || exit 1; \
@@ -49,7 +72,11 @@ clean:
 producer:
 	kafka-console-producer --broker-list localhost:9092 --topic uk.gov.ons.dp.web.schedule
 $(SERVICES):
+ifdef NOMAD
+	@nomad_plan=$(NOMAD_PLAN_TARGET)/$@.nomad; if [[ ! -f $$nomad_plan ]]; then echo Cannot see $$nomad_plan; exit 1; fi; echo nomad run $$nomad_plan; nomad run $$nomad_plan
+else
 	@main=$(CMD_DIR)/$@/main.go; if [[ ! -f $$main ]]; then echo Cannot see $$main; exit 1; fi; go run -race $$main
+endif
 all: $(SERVICES)
 
 hash:
@@ -75,27 +102,35 @@ deploy-archive:
 	ansible-playbook $(ANSIBLE_ARGS) -i prototype_hosts prototype.yml -e "s3_bucket=$(S3_BUCKET) s3_archive_file=$(S3_RELEASE_FOLDER)/$$archive archive_file=$$archive"
 
 nomad:
-		@for t in nomad/*-template.nomad; do			\
-			plan=$${t%-template.nomad}.nomad;	\
-			test -f $$plan && rm $$plan;		\
-			sed	-e 's,NOMAD_DATA_CENTER,$(DATA_CENTER),g'			\
-				-e 's,S3_TAR_FILE_LOCATION,$(S3_TAR_FILE),g'			\
-				-e 's,KAFKA_ADDRESS,$(KAFKA_ADDR),g'		\
-				-e 's,VAULT_ADDRESS,$(VAULT_ADDR),g'		\
-				-e 's,S3_CONTENT_URL,$(S3_URL),g'		\
-				-e 's,S3_CONTENT_BUCKET,$(S3_BUCKET),g'	\
-				-e 's,COLLECTION_S3_BUCKET,$(UPSTREAM_S3_BUCKET),g'	\
-				-e 's,COLLECTION_S3_URL,$(UPSTREAM_S3_URL),g'	\
-				-e 's,PUBLISH_DB_ACCESS,$(PUBLISH_DB_ACCESS),g'		\
-				-e 's,WEB_DB_ACCESS,$(WEB_DB_ACCESS),g'		\
-				-e 's,SCHEDULER_VAULT_TOKEN,$(SCHEDULER_VAULT_TOKEN),g'		\
-				-e 's,ELASTIC_SEARCH_URL,$(ELASTIC_SEARCH_URL),g'		\
-				-e 's,CONTENT_S3_ACCESS_KEY,$(S3_ACCESS_KEY),g'		\
-				-e 's,CONTENT_S3_SECRET_KEY,$(S3_SECRET_ACCESS_KEY),g'		\
-				-e 's,COLLECTION_S3_ACCESS_KEY,$(UPSTREAM_S3_ACCESS_KEY),g'		\
-				-e 's,COLLECTION_S3_SECRET_KEY,$(UPSTREAM_S3_SECRET_ACCESS_KEY),g'		\
-				-e 's,HEALTHCHECK_ENDPOINT,$(HEALTHCHECK_ENDPOINT),g'			\
-				< $$t > $$plan || exit 2;			\
-		done
+	@test -d $(NOMAD_PLAN_TARGET) || mkdir -p $(NOMAD_PLAN_TARGET)
+	@driver=exec; [[ -n "$(DEV)" ]] && driver=raw_exec;	\
+	for nomad_template in $(NOMAD_SRC_DIR)/*-template.nomad; do		\
+		nomad_target=$(NOMAD_PLAN_TARGET)/$${nomad_template##*/};	\
+		nomad_target=$${nomad_target%-*}.nomad;		\
+		test -f $$nomad_target && rm $$nomad_target;			\
+		$(SED) -r	\
+			-e 's,\bNOMAD_DATA_CENTER\b,$(DATA_CENTER),g'			\
+			-e 's,\bS3_TAR_FILE_LOCATION\b,$(S3_TAR_FILE),g'		\
+			-e 's,\bKAFKA_ADDRESS\b,$(KAFKA_ADDR),g'			\
+			-e 's,\bVAULT_ADDRESS\b,$(VAULT_ADDR),g'			\
+			-e 's,\bS3_CONTENT_URL\b,$(S3_URL),g'				\
+			-e 's,\bS3_SECURE_FLAG\b,$(S3_SECURE),g'			\
+			-e 's,\bS3_CONTENT_BUCKET\b,$(S3_BUCKET),g'			\
+			-e 's,\bCOLLECTION_S3_BUCKET\b,$(UPSTREAM_S3_BUCKET),g'		\
+			-e 's,\bCOLLECTION_S3_URL\b,$(UPSTREAM_S3_URL),g'		\
+			-e 's,\bPUBLISH_DB_ACCESS\b,$(PUBLISH_DB_ACCESS),g'		\
+			-e 's,\bWEB_DB_ACCESS\b,$(WEB_DB_ACCESS),g'			\
+			-e 's,\bSCHEDULER_VAULT_TOKEN\b,$(SCHEDULER_VAULT_TOKEN),g'	\
+			-e 's,\bELASTIC_SEARCH_URL\b,$(ELASTIC_SEARCH_URL),g'		\
+			-e 's,\bCONTENT_S3_ACCESS_KEY\b,$(S3_ACCESS_KEY),g'		\
+			-e 's,\bCONTENT_S3_SECRET_KEY\b,$(S3_SECRET_ACCESS_KEY),g'	\
+			-e 's,\bCOLLECTION_S3_ACCESS_KEY\b,$(UPSTREAM_S3_ACCESS_KEY),g'	\
+			-e 's,\bCOLLECTION_S3_SECRET_KEY\b,$(UPSTREAM_S3_SECRET_ACCESS_KEY),g'	\
+			-e 's,\bCOLLECTION_S3_SECURE\b,$(UPSTREAM_S3_SECURE),g'		\
+			-e 's,\bHEALTHCHECK_ENDPOINT\b,$(HEALTHCHECK_ENDPOINT),g'	\
+			-e 's,\bHUMAN_LOG_FLAG\b,$(HUMAN_LOG),g'			\
+			-e 's,^(  *driver  *=  *)"exec",\1"'$$driver'",'		\
+			< $$nomad_template > $$nomad_target || exit 2;			\
+	done
 
 .PHONY: build package producer test all latest-archive deploy deploy-archive upload-build nomad $(SERVICES)

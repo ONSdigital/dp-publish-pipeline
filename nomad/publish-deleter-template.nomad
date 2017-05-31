@@ -20,7 +20,8 @@ job "publish-deleter" {
                 KAFKA_ADDR = "KAFKA_ADDRESS"
                 DB_ACCESS = "WEB_DB_ACCESS"
                 ELASTIC_SEARCH_NODES = "ELASTIC_SEARCH_URL"
-                HEALTHCHECK_PORT = "${NOMAD_PORT_http}"
+                HEALTHCHECK_ADDR = ":${NOMAD_PORT_http}"
+                HUMAN_LOG = "HUMAN_LOG_FLAG"
             }
             driver = "exec"
             config {

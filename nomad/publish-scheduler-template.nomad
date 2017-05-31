@@ -21,7 +21,8 @@ job "publish-scheduler" {
                 DB_ACCESS = "PUBLISH_DB_ACCESS"
                 VAULT_ADDR = "VAULT_ADDRESS"
                 VAULT_TOKEN = "SCHEDULER_VAULT_TOKEN"
-                HEALTHCHECK_PORT = "${NOMAD_PORT_http}"
+                HEALTHCHECK_ADDR = ":${NOMAD_PORT_http}"
+                HUMAN_LOG = "HUMAN_LOG_FLAG"
             }
             driver = "exec"
             config {

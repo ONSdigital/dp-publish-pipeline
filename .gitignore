@@ -5,10 +5,3 @@ build
 .idea
 dp-publish-pipeline.iml
 dp-config
-nomad/publish-metadata.nomad
-nomad/publish-data.nomad
-nomad/publish-tracker.nomad
-nomad/publish-scheduler.nomad
-nomad/publish-deleter.nomad
-nomad/publish-receiver.nomad
-nomad/publish-search-indexer.nomad

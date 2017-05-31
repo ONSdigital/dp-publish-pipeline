@@ -19,7 +19,8 @@ job "publish-receiver" {
             env {
                 KAFKA_ADDR = "KAFKA_ADDRESS"
                 DB_ACCESS = "WEB_DB_ACCESS"
-                HEALTHCHECK_PORT = "${NOMAD_PORT_http}"
+                HEALTHCHECK_ADDR = ":${NOMAD_PORT_http}"
+                HUMAN_LOG = "HUMAN_LOG_FLAG"
             }
             driver = "exec"
             config {
