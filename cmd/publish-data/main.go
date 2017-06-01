@@ -77,9 +77,10 @@ func main() {
 	upstreamBucketName := utils.GetEnvironmentVariable("UPSTREAM_S3_BUCKET", "upstream-content")
 	//upstreamRegionName := utils.GetEnvironmentVariable("UPSTREAM_S3_REGION", "eu-west-2")
 	upstreamEndpoint := utils.GetEnvironmentVariable("UPSTREAM_S3_URL", "localhost:4000")
+	upstreamS3Secure := (utils.GetEnvironmentVariable("UPSTREAM_S3_SECURE", "1") == "1")
 	upstreamAccessKeyID := utils.GetEnvironmentVariable("UPSTREAM_S3_ACCESS_KEY", "1234")
 	upstreamSecretAccessKey := utils.GetEnvironmentVariable("UPSTREAM_S3_SECRET_ACCESS_KEY", "1234")
-	s3UpstreamClient, err := s3.CreateClient(upstreamBucketName, upstreamEndpoint, upstreamAccessKeyID, upstreamSecretAccessKey, false)
+	s3UpstreamClient, err := s3.CreateClient(upstreamBucketName, upstreamEndpoint, upstreamAccessKeyID, upstreamSecretAccessKey, upstreamS3Secure)
 	if err != nil {
 		log.ErrorC("Could not create s3 upstream client", err, nil)
 		panic(err)
@@ -88,9 +89,10 @@ func main() {
 	bucketName := utils.GetEnvironmentVariable("S3_BUCKET", "content")
 	regionName := utils.GetEnvironmentVariable("S3_REGION", "eu-west-1")
 	endpoint := utils.GetEnvironmentVariable("S3_URL", "localhost:4000")
+	s3Secure := (utils.GetEnvironmentVariable("S3_SECURE", "1") == "1")
 	accessKeyID := utils.GetEnvironmentVariable("S3_ACCESS_KEY", "1234")
 	secretAccessKey := utils.GetEnvironmentVariable("S3_SECRET_ACCESS_KEY", "1234")
-	s3Client, err := s3.CreateClient(bucketName, endpoint, accessKeyID, secretAccessKey, false)
+	s3Client, err := s3.CreateClient(bucketName, endpoint, accessKeyID, secretAccessKey, s3Secure)
 	if err != nil {
 		log.ErrorC("Could not create s3 client", err, nil)
 		panic(err)

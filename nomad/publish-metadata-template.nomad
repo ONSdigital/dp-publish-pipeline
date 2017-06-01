@@ -20,8 +20,11 @@ job "publish-metadata" {
                 KAFKA_ADDR = "KAFKA_ADDRESS"
                 UPSTREAM_S3_BUCKET = "COLLECTION_S3_BUCKET"
                 UPSTREAM_S3_URL = "COLLECTION_S3_URL"
+                UPSTREAM_S3_SECURE = "COLLECTION_S3_SECURE"
                 UPSTREAM_S3_ACCESS_KEY = "COLLECTION_S3_ACCESS_KEY"
                 UPSTREAM_S3_SECRET_ACCESS_KEY = "COLLECTION_S3_SECRET_KEY"
+                HEALTHCHECK_ADDR = ":${NOMAD_PORT_http}"
+                HUMAN_LOG = "HUMAN_LOG_FLAG"
             }
             driver = "exec"
             config {
@@ -31,6 +34,18 @@ job "publish-metadata" {
             resources {
                 cpu = 450
                 memory = 300
+                network {
+                    port "http" {}
+                }
+            }
+            service {
+                port = "http"
+                check {
+                    type     = "http"
+                    path     = "HEALTHCHECK_ENDPOINT"
+                    interval = "10s"
+                    timeout  = "2s"
+                }
             }
         }
   }

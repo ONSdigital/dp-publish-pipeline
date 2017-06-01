@@ -10,9 +10,10 @@ See the following pages per service
 * [Publish-receiver](publish-receiver/README.md)
 * [Publish-search-indexer](Publish-search-indexer/README.md)
 
-### API
-* [Content-API](content-api/README.md)
-* [Generator-API](generator-api/README.md)
+### External APIs (see also)
+* [Content-API](../dp-content-api/README.md)
+* [Generator-API](../dp-generator-api/README.md)
+* [Search-Query API](../dp-search-query/README.md)
 
 ### Design
 ![alt Design](doc/design.png)
@@ -37,6 +38,11 @@ Before creating the nomad plans the following env variables need exporting.
 
 Once all env variables have been exported run ```make nomad```. This shall generate 7 nomad
 plans for the publish pipeline services.
+
+#### Running a test environment (typically on macOS, common to all services)
+* Install kafka server ```brew install kafka```
+* Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```
+* Install GNU sed `brew install gnu-sed` (installs `gsed` - used by `Makefile`)
 
 ### Latest test results (2017 February)
 Machines: AWS M4.large, M3.xlarge, M4.large

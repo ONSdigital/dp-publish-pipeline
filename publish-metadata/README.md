@@ -13,10 +13,6 @@ Decrypts metadata (JSON) and pushes the data off to a publish receiver
 
 * see [Publish-data](publish-data/README.md) for the list of S3 env vars
 
-#### Running a test environment
-* Install kafka server ```brew install kafka```
-* Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```
-
 #### Typical config changes
 
 To increase the message size allowed for the $PRODUCE_TOPIC:

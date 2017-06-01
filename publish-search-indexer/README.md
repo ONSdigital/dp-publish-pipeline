@@ -17,10 +17,6 @@ the ONS website.
 
 #### Running a test environment
 
-##### Kafka install
-* Install Kafka server `brew install kafka`
-* Start zookeeper and kafka `brew services start zookeeper && brew services start kafka`
-
 ##### Elastic search install via brew
 * Install Elastic Search `brew install elasticsearch@5.2`
 * Ensure the cluser.name property is set to `cluster.name: elasticsearch`.

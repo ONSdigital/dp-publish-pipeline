@@ -19,8 +19,3 @@ Examples of messages
 
 * `HEALTHCHECK_ADDR` defaults to ':8080'
 * `HEALTHCHECK_ENDPOINT` defaults to '/healthcheck'
-
-
-#### Running a test environment
-* Install kafka server ```brew install kafka```
-* Start zookeeper and kafka ```brew services start zookeeper && brew services start kafka```

@@ -20,6 +20,8 @@ job "publish-deleter" {
                 KAFKA_ADDR = "KAFKA_ADDRESS"
                 DB_ACCESS = "WEB_DB_ACCESS"
                 ELASTIC_SEARCH_NODES = "ELASTIC_SEARCH_URL"
+                HEALTHCHECK_ADDR = ":${NOMAD_PORT_http}"
+                HUMAN_LOG = "HUMAN_LOG_FLAG"
             }
             driver = "exec"
             config {
@@ -29,6 +31,18 @@ job "publish-deleter" {
             resources {
                 cpu = 450
                 memory = 300
+                network {
+                    port "http" {}
+                }
+            }
+            service {
+                port = "http"
+                check {
+                    type     = "http"
+                    path     = "HEALTHCHECK_ENDPOINT"
+                    interval = "10s"
+                    timeout  = "2s"
+                }
             }
         }
   }
