@@ -373,6 +373,7 @@ func (dbMeta dbMetaObj) prep(tag, sql string) {
 
 func main() {
 	log.Namespace = "publish-scheduler"
+	maxMessageSize, err := utils.GetEnvironmentVariableInt("KAFKA_MESSAGE_SIZE", 157286400) // default to 150MB
 	scheduleTopic := utils.GetEnvironmentVariable("SCHEDULE_TOPIC", "uk.gov.ons.dp.web.schedule")
 	produceFileTopic := utils.GetEnvironmentVariable("PUBLISH_FILE_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	produceDeleteTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.publish-delete")
@@ -418,6 +419,7 @@ func main() {
 
 	log.Info(fmt.Sprintf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic), nil)
 
+	kafka.SetMaxMessageSize(int32(maxMessageSize))
 	totalProducer := kafka.NewProducer(produceTotalTopic)
 	scheduleConsumer, err := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
 	if err != nil {
