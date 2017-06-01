@@ -35,6 +35,11 @@ func (M Message) Commit() {
 	//log.Printf("Offset : %d, Partition : %d", M.message.Offset, M.message.Partition)
 }
 
+func SetMaxMessageSize(maxSize int32) {
+	sarama.MaxRequestSize = maxSize
+	sarama.MaxResponseSize = maxSize
+}
+
 func NewConsumerGroup(topic string, group string) (*ConsumerGroup, error) {
 	config := cluster.NewConfig()
 	config.Group.Return.Notifications = true
