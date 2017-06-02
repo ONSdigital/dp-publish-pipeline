@@ -69,9 +69,9 @@ test:
 	@rc=0; for service in $(SERVICES) $(UTILS); do \
 		[[ " $(SKIP_SERVICES) " = *" $$service "* ]] && continue; \
 		main=$(CMD_DIR)/$$service/main.go; \
-		[[ -f $$main ]] || exit 1; \
+		[[ -f $$main ]] || continue; \
 		echo Testing $$service ...; \
-		go test $$main || rc=$?; \
+		go test $$main || rc=$$?; \
 	done; exit $$rc
 
 clean:
