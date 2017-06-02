@@ -1,9 +1,10 @@
+SHELL=bash
+
 SERVICES?=publish-receiver publish-scheduler publish-metadata publish-tracker publish-data \
      publish-search-indexer publish-deleter
 SKIP_SERVICES?=
 UTILS?=decrypt kafka s3 utils
-PACKABLE_BIN=scripts/dp scripts/ennary
-PACKABLE_ETC=scripts/init.sql
+
 REMOTE_BIN=bin
 REMOTE_ETC=etc
 ANSIBLE_ARGS?=
@@ -11,21 +12,29 @@ ARCHIVE?=$(shell make $(MAKEFLAGS) latest-archive)
 HASH?=$(shell make hash)
 CMD_DIR?=cmd
 HEALTHCHECK_ENDPOINT?=/healthcheck
-DATA_CENTER?=dc1
 DEV?=
 
 S3_BUCKET?=dp-publish-content-test
 S3_RELEASE_FOLDER?=release
 S3_URL?=s3://$(S3_BUCKET)/$(S3_RELEASE_FOLDER)
+S3_REGION?=eu-west-1
 
 ifdef DEV
 S3_SECURE?=0
 UPSTREAM_S3_SECURE?=0
 HUMAN_LOG?=1
+DATA_CENTER?=dc1
+PACKABLE_BIN?=scripts/dp scripts/ennary
+PACKABLE_ETC?=scripts/init.sql
+NOMAD?=
 else
 S3_SECURE?=1
 UPSTREAM_S3_SECURE?=1
 HUMAN_LOG?=
+DATA_CENTER?=$(S3_REGION)
+PACKABLE_BIN?=
+PACKABLE_ETC?=
+NOMAD?=1
 endif
 
 export GOOS?=$(shell go env GOOS)
@@ -43,7 +52,6 @@ BUILD_ARCH=$(BUILD)/$(GOOS)-$(GOARCH)
 DATE:=$(shell date '+%Y%m%d-%H%M%S')
 TGZ_FILE=publish-$(GOOS)-$(GOARCH)-$(DATE)-$(HASH).tar.gz
 
-NOMAD?=
 NOMAD_SRC_DIR?=nomad
 NOMAD_PLAN_TARGET?=$(BUILD)
 
