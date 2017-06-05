@@ -417,13 +417,9 @@ func main() {
 		dbMeta.prep("select-ready", "UPDATE schedule s SET start_time=$1 WHERE complete_time IS NULL AND schedule_time <= $1 AND (start_time IS NULL OR (start_time <= $2 AND NOT EXISTS(SELECT 1 FROM schedule_file sf WHERE s.schedule_id=sf.schedule_id AND sf.complete_time > $2))) RETURNING schedule_id, start_time, schedule_time, collection_id, collection_path")
 	}
 
-<<<<<<< HEAD
 	log.Info(fmt.Sprintf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic), nil)
 
-=======
-	log.Printf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic)
 	kafka.SetMaxMessageSize(int32(maxMessageSize))
->>>>>>> 2275353... Configure max kafka message size via an env variable
 	totalProducer := kafka.NewProducer(produceTotalTopic)
 	scheduleConsumer, err := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
 	if err != nil {
