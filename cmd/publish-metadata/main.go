@@ -75,11 +75,11 @@ func main() {
 	healthChannel := make(chan bool)
 
 	upstreamBucketName := utils.GetEnvironmentVariable("UPSTREAM_S3_BUCKET", "upstream-content")
-	//upstreamRegionName := utils.GetEnvironmentVariable("UPSTREAM_S3_REGION", "eu-west-2")
+	upstreamRegionName := utils.GetEnvironmentVariable("UPSTREAM_S3_REGION", "eu-west-1")
 	upstreamEndpoint := utils.GetEnvironmentVariable("UPSTREAM_S3_URL", "localhost:4000")
-	upstreamAccessKeyID := utils.GetEnvironmentVariable("UPSTREAM_S3_ACCESS_KEY", "1234")
-	upstreamSecretAccessKey := utils.GetEnvironmentVariable("UPSTREAM_S3_SECRET_ACCESS_KEY", "1234")
-	s3UpstreamClient, err := s3.CreateClient(upstreamBucketName, upstreamEndpoint, upstreamAccessKeyID, upstreamSecretAccessKey, false)
+	IAM := (utils.GetEnvironmentVariable("UPSTREAM_S3_IAM", "1") == "1")
+	s3Secure := (utils.GetEnvironmentVariable("UPSTREAM_S3_SECURE", "1") == "1")
+	s3UpstreamClient, err := s3.CreateClient(upstreamRegionName, upstreamBucketName, upstreamEndpoint, IAM, s3Secure)
 	if err != nil {
 		log.ErrorC("Could not obtain s3 client", err, nil)
 		panic(err)

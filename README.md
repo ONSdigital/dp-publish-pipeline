@@ -15,6 +15,30 @@ See the following pages per service
 * [Generator-API](../dp-generator-api/README.md)
 * [Search-Query API](../dp-search-query/README.md)
 
+### Setting up minio server
+* Run the minio server ```minio server --address :4000 <file directory>```
+* Create a file at ~/.mc/config and copy the content into it. Then set the access key and secret key
+```
+{
+  "version": "8",
+  "hosts": {
+	"s3": {
+      "url": "localhost:4000",
+      "accessKey": "<Add access key>",
+      "secretKey": "<Add secret key>",
+      "api": "s3v4"
+    }
+  }
+}
+```
+* Export the following environment variables before running the go apps 
+```
+export S3_IAM=0
+export UPSTREAM_S3_IAM=0
+export UPSTREAM_S3_SECURE=0
+export UPSTREAM_S3_SECURE=0 
+```
+
 ### Design
 ![alt Design](doc/design.png)
 
