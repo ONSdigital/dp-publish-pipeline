@@ -380,6 +380,11 @@ func main() {
 	produceTotalTopic := utils.GetEnvironmentVariable("PUBLISH_COUNT_TOPIC", "uk.gov.ons.dp.web.publish-count")
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 	restartGap, err := utils.GetEnvironmentVariableInt("RESEND_AFTER_QUIET_SECONDS", 0)
+	if err != nil {
+		log.ErrorC("Failed to parse RESEND_AFTER_QUIET_SECONDS", err, nil)
+		panic("Failed to parse RESEND_AFTER_QUIET_SECONDS")
+	}
+	restartGapNano := int64(restartGap * 1000 * 1000 * 1000)
 	vaultToken := utils.GetEnvironmentVariable("VAULT_TOKEN", "")
 	vaultAddr := utils.GetEnvironmentVariable("VAULT_ADDR", "http://127.0.0.1:8200")
 	vaultRenewTime, err := utils.GetEnvironmentVariableInt("VAULT_RENEW_TIME", 5)
@@ -391,12 +396,6 @@ func main() {
 		log.ErrorC("Failed to connect to vault", err, nil)
 		panic("Failed to connect to vault")
 	}
-
-	if err != nil {
-		log.ErrorC("Failed to parse RESEND_AFTER_QUIET_SECONDS", err, nil)
-		panic("Failed to parse RESEND_AFTER_QUIET_SECONDS")
-	}
-	restartGapNano := int64(restartGap * 1000 * 1000 * 1000)
 
 	db, err := sql.Open("postgres", dbSource)
 	if err != nil {
