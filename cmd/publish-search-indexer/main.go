@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/ONSdigital/dp-publish-pipeline/health"
-	"github.com/ONSdigital/dp-publish-pipeline/kafka"
 	"github.com/ONSdigital/dp-publish-pipeline/utils"
+	"github.com/ONSdigital/go-ns/kafka"
 	"github.com/ONSdigital/go-ns/log"
 	"gopkg.in/olivere/elastic.v5"
 )
