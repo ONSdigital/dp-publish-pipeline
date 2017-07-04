@@ -30,8 +30,8 @@ func TestGetEnvironmentVariableAsArray(t *testing.T) {
 }
 
 func TestGetEnvironmentVariableAsArrayDefault(t *testing.T) {
-	expected := []string{"Test123"}
-	results := GetEnvironmentVariableAsArray("TEST32", "Test123")
+	expected := []string{"Test123", "Test321"}
+	results := GetEnvironmentVariableAsArray("TEST32", "Test123,Test321")
 	if expected[0] != results[0] {
 		t.Errorf("Test failed, expected: %s got: %s", expected, results)
 	}
