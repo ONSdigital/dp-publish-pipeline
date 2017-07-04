@@ -99,12 +99,13 @@ func prep(sql string, db *sql.DB) *sql.Stmt {
 
 func main() {
 	log.Namespace = "publish-receiver"
+	brokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 	fileCompleteTopic := utils.GetEnvironmentVariable(FILE_COMPLETE_TOPIC_ENV, "uk.gov.ons.dp.web.complete-file")
 	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
 	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
 	dbSource := utils.GetEnvironmentVariable("DB_ACCESS", "user=dp dbname=dp sslmode=disable")
 
-	fileCompleteConsumer, err := kafka.NewConsumerGroup(fileCompleteTopic, "publish-receiver")
+	fileCompleteConsumer, err := kafka.NewConsumerGroup(brokers, fileCompleteTopic, "publish-receiver", kafka.OffsetNewest)
 	if err != nil {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic(err)

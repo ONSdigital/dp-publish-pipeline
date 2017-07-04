@@ -66,6 +66,7 @@ func main() {
 	log.Namespace = "publish-metadata"
 
 	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
+	brokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	completeFileTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
@@ -86,13 +87,13 @@ func main() {
 	}
 
 	log.Info(fmt.Sprintf("Starting Publish-metadata from %q to %q, %q", consumeTopic, completeFileTopic, completeFileFlagTopic), nil)
-	consumer, err := kafka.NewConsumerGroup(consumeTopic, "publish-metadata")
+	consumer, err := kafka.NewConsumerGroup(brokers, consumeTopic, "publish-metadata", kafka.OffsetNewest)
 	if err != nil {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic(err)
 	}
-	fileProducer := kafka.NewProducer(completeFileTopic)
-	flagProducer := kafka.NewProducer(completeFileFlagTopic)
+	fileProducer := kafka.NewProducer(brokers, completeFileTopic, 0)
+	flagProducer := kafka.NewProducer(brokers, completeFileFlagTopic, 0)
 
 	go func() {
 		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, nil))

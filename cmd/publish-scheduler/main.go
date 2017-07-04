@@ -390,6 +390,7 @@ func main() {
 	vaultRenewTime, err := utils.GetEnvironmentVariableInt("VAULT_RENEW_TIME", 5)
 	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
 	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
+	brokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 
 	vaultClient, err := vault.CreateVaultClient(vaultToken, vaultAddr)
 	if err != nil {
@@ -419,14 +420,14 @@ func main() {
 	log.Info(fmt.Sprintf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic), nil)
 
 	kafka.SetMaxMessageSize(int32(maxMessageSize))
-	totalProducer := kafka.NewProducer(produceTotalTopic)
-	scheduleConsumer, err := kafka.NewConsumerGroup(scheduleTopic, "publish-scheduler")
+	totalProducer := kafka.NewProducer(brokers, produceTotalTopic, maxMessageSize)
+	scheduleConsumer, err := kafka.NewConsumerGroup(brokers, scheduleTopic, "publish-scheduler", kafka.OffsetNewest)
 	if err != nil {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic("Could not obtain consumer")
 	}
-	fileProducer := kafka.NewProducer(produceFileTopic)
-	deleteProducer := kafka.NewProducer(produceDeleteTopic)
+	fileProducer := kafka.NewProducer(brokers, produceFileTopic, maxMessageSize)
+	deleteProducer := kafka.NewProducer(brokers, produceDeleteTopic, maxMessageSize)
 
 	publishChannel := make(chan scheduleJob)
 	healthChannel := make(chan bool)

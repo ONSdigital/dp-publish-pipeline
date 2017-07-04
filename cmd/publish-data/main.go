@@ -67,6 +67,7 @@ func main() {
 	log.Namespace = "publish-data"
 
 	zebedeeRoot := utils.GetEnvironmentVariable("ZEBEDEE_ROOT", "../test-data/")
+	brokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 	consumeTopic := utils.GetEnvironmentVariable("CONSUME_TOPIC", "uk.gov.ons.dp.web.publish-file")
 	completeFileTopic := utils.GetEnvironmentVariable("PRODUCE_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	completeFileFlagTopic := utils.GetEnvironmentVariable("COMPLETE_FILE_FLAG_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
@@ -107,13 +108,13 @@ func main() {
 		panic("healthcheck listener exited")
 	}()
 
-	consumer, err := kafka.NewConsumerGroup(consumeTopic, "publish-data")
+	consumer, err := kafka.NewConsumerGroup(brokers, consumeTopic, "publish-data", kafka.OffsetNewest)
 	if err != nil {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic(err)
 	}
-	completeFileProducer := kafka.NewProducer(completeFileTopic)
-	completeFileFlagProducer := kafka.NewProducer(completeFileFlagTopic)
+	completeFileProducer := kafka.NewProducer(brokers, completeFileTopic, 0)
+	completeFileFlagProducer := kafka.NewProducer(brokers, completeFileFlagTopic, 0)
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:

@@ -45,7 +45,7 @@ type PageDescription struct {
 }
 
 func main() {
-	kafkaBrokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
+	brokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 	consumerTopic := utils.GetEnvironmentVariable("KAFKA_CONSUMER_TOPIC", "uk.gov.ons.dp.web.complete-file")
 	elasticSearchNodes := utils.GetEnvironmentVariableAsArray("ELASTIC_SEARCH_NODES", "http://127.0.0.1:9200")
 	elasticSearchIndex := utils.GetEnvironmentVariable("ELASTIC_SEARCH_INDEX", "ons")
@@ -53,7 +53,7 @@ func main() {
 	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
 	log.Namespace = "publish-search-indexer"
 	log.Debug("Starting publish search indexer",
-		log.Data{"kafka_brokers": kafkaBrokers,
+		log.Data{"kafka_brokers": brokers,
 			"kafka_consumer_topic": consumerTopic,
 			"elastic_nodes":        elasticSearchNodes,
 			"elastic_index":        elasticSearchIndex})
@@ -84,7 +84,7 @@ func main() {
 
 	// Setup kafka using consumer groups
 	groupName := "publish-search-index"
-	consumer, consumerErr := kafka.NewConsumerGroup(consumerTopic, groupName)
+	consumer, consumerErr := kafka.NewConsumerGroup(brokers, consumerTopic, groupName, kafka.OffsetNewest)
 	if err != nil {
 		log.ErrorC("Failed to create kafka consumer", consumerErr, log.Data{"topic": consumerTopic,
 			"group": groupName})

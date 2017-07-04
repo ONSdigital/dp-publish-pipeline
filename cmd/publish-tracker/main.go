@@ -110,6 +110,7 @@ func main() {
 	completeCollectionTopic := utils.GetEnvironmentVariable("COMPLETE_TOPIC", "uk.gov.ons.dp.web.complete")
 	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
 	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
+	brokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 	maxConcurrentFileCompletes, err := utils.GetEnvironmentVariableInt("MAX_CONCURRENT_FILE_COMPLETES", 40)
 	if err != nil {
 		log.ErrorC("Cannot convert MAX_CONCURRENT_FILE_COMPLETES to integer", err, nil)
@@ -134,12 +135,12 @@ func main() {
 	dbMeta.prep("update-complete-job", "UPDATE schedule SET complete_time=$2 WHERE schedule_id=$1 AND start_time IS NOT NULL AND complete_time IS NULL RETURNING collection_id, start_time")
 	dbMeta.prep("healthcheck", "SELECT 1 FROM schedule_delete")
 
-	fileConsumer, err := kafka.NewConsumerGroup(completeFileTopic, "publish-tracker")
+	fileConsumer, err := kafka.NewConsumerGroup(brokers, completeFileTopic, "publish-tracker", kafka.OffsetNewest)
 	if err != nil {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic(err)
 	}
-	producer := kafka.NewProducer(completeCollectionTopic)
+	producer := kafka.NewProducer(brokers, completeCollectionTopic, 0)
 
 	rateLimitFileCompletes := make(chan bool, maxConcurrentFileCompletes)
 	healthChannel := make(chan bool)
