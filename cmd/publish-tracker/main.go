@@ -65,14 +65,14 @@ func markJobComplete(dbMeta dbMetaObj, producer kafka.Producer, scheduleId, comp
 		panic(err)
 	}
 
-	data, _ := json.Marshal(kafka.CollectionCompleteMessage{scheduleId, collectionId.String})
+	data, _ := json.Marshal(utils.CollectionCompleteMessage{scheduleId, collectionId.String})
 	producer.Output <- data
 
 	return time.Duration(completedTime-startTime.Int64) * time.Nanosecond, collectionId.String, nil
 }
 
 func markFileComplete(jsonMessage []byte, dbMeta dbMetaObj) {
-	var file kafka.FileCompleteFlagMessage
+	var file utils.FileCompleteFlagMessage
 	if err := json.Unmarshal(jsonMessage, &file); err != nil {
 		log.ErrorC("Failed to parse json message", err, log.Data{"json": jsonMessage})
 		return

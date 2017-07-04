@@ -16,7 +16,7 @@ import (
 )
 
 func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer kafka.Producer, s3UpstreamClient s3.S3Client) error {
-	var message kafka.PublishFileMessage
+	var message utils.PublishFileMessage
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
 		return fmt.Errorf("Failed to parse json message: %s", err)
@@ -53,9 +53,9 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 		return fmt.Errorf("Job %d Collection %q - Failed to obtain file %d: %q - %s", message.ScheduleId, message.CollectionId, message.FileId, message.FileLocation, contentErr)
 	}
 
-	data, _ := json.Marshal(kafka.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, FileContent: string(content), CollectionId: message.CollectionId})
+	data, _ := json.Marshal(utils.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, FileContent: string(content), CollectionId: message.CollectionId})
 	fileProducer.Output <- data
-	data, _ = json.Marshal(kafka.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, CollectionId: message.CollectionId})
+	data, _ = json.Marshal(utils.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, CollectionId: message.CollectionId})
 	flagProducer.Output <- data
 
 	log.Info(fmt.Sprintf("Job %d Collection %q - uri %s", message.ScheduleId, message.CollectionId, message.FileLocation), nil)

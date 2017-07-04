@@ -133,7 +133,7 @@ func after(executionId int64, requests []elastic.BulkableRequest, response *elas
 
 func processMessage(msg []byte, bulkProcessor *elastic.BulkProcessor, elasticSearchIndex string) error {
 	// First deserialise the event to check that its a json file to index.
-	var event kafka.FileCompleteMessage
+	var event utils.FileCompleteMessage
 	err := json.Unmarshal(msg, &event)
 	if err != nil {
 		return err

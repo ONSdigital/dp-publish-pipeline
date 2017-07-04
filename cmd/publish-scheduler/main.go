@@ -36,8 +36,8 @@ type scheduleJob struct {
 	collectionPath string
 	scheduleTime   int64
 	encryptionKey  string
-	files          []kafka.FileResource
-	urisToDelete   []kafka.FileResource
+	files          []utils.FileResource
+	urisToDelete   []utils.FileResource
 }
 
 func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChannel, totalProducerChannel chan []byte) {
@@ -51,7 +51,7 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 
 	// Send published files to the kafka topic
 	for i := 0; i < len(job.files); i++ {
-		if data, err = json.Marshal(kafka.PublishFileMessage{
+		if data, err = json.Marshal(utils.PublishFileMessage{
 			ScheduleId:     job.scheduleId,
 			FileId:         job.files[i].Id,
 			CollectionId:   job.collectionId,
@@ -69,7 +69,7 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 
 	// Send published deletes to the kafka topic
 	for i := 0; i < len(job.urisToDelete); i++ {
-		if data, err = json.Marshal(kafka.PublishDeleteMessage{
+		if data, err = json.Marshal(utils.PublishDeleteMessage{
 			ScheduleId:   job.scheduleId,
 			DeleteId:     job.urisToDelete[i].Id,
 			Uri:          job.urisToDelete[i].Uri,
@@ -84,7 +84,7 @@ func publishCollection(job scheduleJob, fileProducerChannel, deleteProducerChann
 }
 
 func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
-	var message kafka.ScheduleMessage
+	var message utils.ScheduleMessage
 	if err := json.Unmarshal(jsonMessage, &message); err != nil {
 		log.ErrorC("Failed to parse json", err, log.Data{"msg": jsonMessage})
 		panic(err)
@@ -109,19 +109,19 @@ func scheduleCollection(jsonMessage []byte, dbMeta dbMetaObj) {
 			scheduleTime:   scheduleTime,
 		}
 
-		var files []kafka.FileResource
+		var files []utils.FileResource
 		for i := 0; i < len(message.Files); i++ {
-			files = append(files, kafka.FileResource{Location: message.Files[i].Location, Uri: message.Files[i].Uri})
+			files = append(files, utils.FileResource{Location: message.Files[i].Location, Uri: message.Files[i].Uri})
 		}
-		newJob.files = make([]kafka.FileResource, len(files))
+		newJob.files = make([]utils.FileResource, len(files))
 		copy(newJob.files, files)
 
-		var deletes []kafka.FileResource
+		var deletes []utils.FileResource
 		for i := 0; i < len(message.UrisToDelete); i++ {
 			log.Trace(message.UrisToDelete[i], nil)
-			deletes = append(deletes, kafka.FileResource{Uri: message.UrisToDelete[i]})
+			deletes = append(deletes, utils.FileResource{Uri: message.UrisToDelete[i]})
 		}
-		newJob.urisToDelete = make([]kafka.FileResource, len(deletes))
+		newJob.urisToDelete = make([]utils.FileResource, len(deletes))
 		copy(newJob.urisToDelete, deletes)
 
 		newJob.scheduleId = storeJob(dbMeta, &newJob)
@@ -185,7 +185,7 @@ func checkSchedule(publishChannel chan scheduleJob, dbMeta dbMetaObj, restartGap
 	}
 }
 
-func loadDataFromDataBase(dbMeta dbMetaObj, scheduleId int64, loadDeletes bool) []kafka.FileResource {
+func loadDataFromDataBase(dbMeta dbMetaObj, scheduleId int64, loadDeletes bool) []utils.FileResource {
 	sqlStmt := "load-incomplete-files"
 	if loadDeletes {
 		sqlStmt = "load-incomplete-deletes"
@@ -197,7 +197,7 @@ func loadDataFromDataBase(dbMeta dbMetaObj, scheduleId int64, loadDeletes bool) 
 	}
 	defer rows.Close()
 
-	var files []kafka.FileResource
+	var files []utils.FileResource
 	for rows.Next() {
 		var (
 			fileId            sql.NullInt64
@@ -208,7 +208,7 @@ func loadDataFromDataBase(dbMeta dbMetaObj, scheduleId int64, loadDeletes bool) 
 			panic(err)
 		}
 
-		files = append(files, kafka.FileResource{Id: fileId.Int64, Location: fileLocation.String, Uri: uri.String})
+		files = append(files, utils.FileResource{Id: fileId.Int64, Location: fileLocation.String, Uri: uri.String})
 	}
 	if err = rows.Err(); err != nil {
 		log.Error(err, nil)

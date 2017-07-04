@@ -18,7 +18,7 @@ import (
 )
 
 func publishDelete(jsonMessage []byte, deleteStatement *sql.Stmt, elasticClient *elastic.Client, producer chan []byte) error {
-	var message kafka.PublishDeleteMessage
+	var message utils.PublishDeleteMessage
 	err := json.Unmarshal(jsonMessage, &message)
 	if err != nil {
 		return err

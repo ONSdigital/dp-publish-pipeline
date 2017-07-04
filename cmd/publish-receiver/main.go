@@ -20,7 +20,7 @@ import (
 const FILE_COMPLETE_TOPIC_ENV = "FILE_COMPLETE_TOPIC"
 
 func storeData(jsonMessage []byte, s3 *sql.Stmt, meta *sql.Stmt) {
-	var dataSet kafka.FileCompleteMessage
+	var dataSet utils.FileCompleteMessage
 	err := json.Unmarshal(jsonMessage, &dataSet)
 	if err != nil {
 		log.ErrorC("Failed to parse json message", err, nil)
@@ -37,7 +37,7 @@ func storeData(jsonMessage []byte, s3 *sql.Stmt, meta *sql.Stmt) {
 	}
 }
 
-func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
+func addS3Data(dataSet utils.FileCompleteMessage, s3 *sql.Stmt) {
 	results, err := s3.Query(dataSet.CollectionId,
 		resolveURI(dataSet.Uri),
 		dataSet.S3Location)
@@ -49,7 +49,7 @@ func addS3Data(dataSet kafka.FileCompleteMessage, s3 *sql.Stmt) {
 	}
 }
 
-func addMetadata(dataSet kafka.FileCompleteMessage, meta *sql.Stmt) {
+func addMetadata(dataSet utils.FileCompleteMessage, meta *sql.Stmt) {
 	lang := getLanguage(dataSet.Uri)
 	results, err := meta.Query(dataSet.CollectionId,
 		resolveURI(dataSet.Uri)+"?lang="+lang,
