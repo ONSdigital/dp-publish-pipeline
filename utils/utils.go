@@ -25,10 +25,10 @@ func GetEnvironmentVariable(name string, defaultValue string) string {
 
 func GetEnvironmentVariableAsArray(name string, defaultValue string) []string {
 	environmentValue := os.Getenv(name)
-	if environmentValue != "" {
-		return strings.Split(environmentValue, ",")
+	if environmentValue == "" {
+		environmentValue = defaultValue
 	}
-	return []string{defaultValue}
+	return strings.Split(environmentValue, ",")
 }
 
 func GetEnvironmentVariableInt(name string, defaultValue int) (int, error) {
