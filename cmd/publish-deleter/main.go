@@ -70,6 +70,7 @@ func main() {
 	producerTopic := utils.GetEnvironmentVariable("PUBLISH_DELETE_TOPIC", "uk.gov.ons.dp.web.complete-file-flag")
 	healthCheckAddr := utils.GetEnvironmentVariable("HEALTHCHECK_ADDR", ":8080")
 	healthCheckEndpoint := utils.GetEnvironmentVariable("HEALTHCHECK_ENDPOINT", "/healthcheck")
+	brokers := utils.GetEnvironmentVariableAsArray("KAFKA_ADDR", "localhost:9092")
 
 	db, err := createPostgresConnection()
 	if err != nil {
@@ -99,12 +100,12 @@ func main() {
 		panic("healthcheck listener exited")
 	}()
 
-	consumer, err := kafka.NewConsumerGroup(consumerTopic, "publish-deletes")
+	consumer, err := kafka.NewConsumerGroup(brokers, consumerTopic, "publish-deletes", kafka.OffsetNewest)
 	if err != nil {
 		log.Error(err, nil)
 		panic(err)
 	}
-	producer := kafka.NewProducer(producerTopic)
+	producer := kafka.NewProducer(brokers, producerTopic, 0)
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming:
