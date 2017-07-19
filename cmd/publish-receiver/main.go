@@ -145,10 +145,10 @@ func main() {
 	signal.Notify(signals, os.Interrupt)
 	for {
 		select {
-		case consumerMessage := <-fileCompleteConsumer.Incoming:
+		case consumerMessage := <-fileCompleteConsumer.Incoming():
 			storeData(consumerMessage.GetData(), s3statement, metaStatement)
 			consumerMessage.Commit()
-		case errorMessage := <-fileCompleteConsumer.Errors:
+		case errorMessage := <-fileCompleteConsumer.Errors():
 			log.Error(fmt.Errorf("got consumer error: %s", errorMessage), nil)
 			panic("got consumer error")
 		case <-signals:

@@ -66,7 +66,7 @@ func markJobComplete(dbMeta dbMetaObj, producer kafka.Producer, scheduleId, comp
 	}
 
 	data, _ := json.Marshal(utils.CollectionCompleteMessage{scheduleId, collectionId.String})
-	producer.Output <- data
+	producer.Output() <- data
 
 	return time.Duration(completedTime-startTime.Int64) * time.Nanosecond, collectionId.String, nil
 }
@@ -161,14 +161,14 @@ func main() {
 
 	for {
 		select {
-		case consumerMessage := <-fileConsumer.Incoming:
+		case consumerMessage := <-fileConsumer.Incoming():
 			rateLimitFileCompletes <- true
 			go func() {
 				defer func() { <-rateLimitFileCompletes }()
 				markFileComplete(consumerMessage.GetData(), dbMeta)
 				consumerMessage.Commit()
 			}()
-		case errorMessage := <-fileConsumer.Errors:
+		case errorMessage := <-fileConsumer.Errors():
 			log.Error(errors.New("Aborting after consumer error"), log.Data{"msg": errorMessage})
 			panic("Aborting after consumer error")
 		case <-healthChannel:

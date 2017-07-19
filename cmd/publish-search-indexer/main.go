@@ -101,14 +101,14 @@ func main() {
 
 	for {
 		select {
-		case consumerMessage := <-consumer.Incoming:
+		case consumerMessage := <-consumer.Incoming():
 			err := processMessage(consumerMessage.GetData(), bulk, elasticSearchIndex)
 			if err != nil {
 				log.ErrorC("Failed to process kafka message", err, log.Data{})
 				panic(err)
 			}
 			consumerMessage.Commit()
-		case err := <-consumer.Errors:
+		case err := <-consumer.Errors():
 			log.ErrorC("Kafka client error", err, log.Data{})
 			panic(err)
 		case <-healthChannel:

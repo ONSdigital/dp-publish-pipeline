@@ -54,9 +54,9 @@ func sendData(zebedeeRoot string, jsonMessage []byte, fileProducer, flagProducer
 	}
 
 	data, _ := json.Marshal(utils.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, FileContent: string(content), CollectionId: message.CollectionId})
-	fileProducer.Output <- data
+	fileProducer.Output() <- data
 	data, _ = json.Marshal(utils.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, Uri: message.Uri, CollectionId: message.CollectionId})
-	flagProducer.Output <- data
+	flagProducer.Output() <- data
 
 	log.Info(fmt.Sprintf("Job %d Collection %q - uri %s", message.ScheduleId, message.CollectionId, message.FileLocation), nil)
 	return nil
@@ -104,12 +104,12 @@ func main() {
 
 	for {
 		select {
-		case consumerMessage := <-consumer.Incoming:
+		case consumerMessage := <-consumer.Incoming():
 			if err := sendData(zebedeeRoot, consumerMessage.GetData(), fileProducer, flagProducer, s3UpstreamClient); err != nil {
 				log.Error(err, nil)
 			}
 			consumerMessage.Commit()
-		case errorMessage := <-consumer.Errors:
+		case errorMessage := <-consumer.Errors():
 			log.Error(fmt.Errorf("Aborting: %s", errorMessage), nil)
 			panic(errorMessage)
 		case <-healthChannel:

@@ -56,9 +56,9 @@ func uploadFile(zebedeeRoot string, jsonMessage []byte, s3UpstreamClient, s3Clie
 	s3Client.AddObject(string(content), s3Path, message.CollectionId, message.ScheduleId)
 	fullS3Path := "s3://" + s3Client.Bucket + "/" + s3Path
 	fileComplete, _ := json.Marshal(utils.FileCompleteMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, Uri: message.Uri, S3Location: fullS3Path})
-	completeFileProducer.Output <- fileComplete
+	completeFileProducer.Output() <- fileComplete
 	fileComplete, _ = json.Marshal(utils.FileCompleteFlagMessage{FileId: message.FileId, ScheduleId: message.ScheduleId, CollectionId: message.CollectionId, Uri: message.Uri})
-	completeFileFlagProducer.Output <- fileComplete
+	completeFileFlagProducer.Output() <- fileComplete
 
 	return nil
 }
@@ -117,13 +117,13 @@ func main() {
 	completeFileFlagProducer := kafka.NewProducer(brokers, completeFileFlagTopic, 0)
 	for {
 		select {
-		case consumerMessage := <-consumer.Incoming:
+		case consumerMessage := <-consumer.Incoming():
 			if err := uploadFile(zebedeeRoot, consumerMessage.GetData(), s3UpstreamClient, s3Client, completeFileProducer, completeFileFlagProducer); err != nil {
 				log.Error(err, nil)
 			} else {
 				consumerMessage.Commit()
 			}
-		case errorMessage := <-consumer.Errors:
+		case errorMessage := <-consumer.Errors():
 			log.Error(fmt.Errorf("Aborting due to consumer error: %v", errorMessage), nil)
 			panic(errorMessage)
 		case <-healthChannel:

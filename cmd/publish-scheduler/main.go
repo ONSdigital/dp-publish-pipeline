@@ -462,14 +462,15 @@ func main() {
 	go func() {
 		for {
 			select {
-			case scheduleMessage := <-scheduleConsumer.Incoming:
+			case scheduleMessage := <-scheduleConsumer.Incoming():
 				scheduleCollection(scheduleMessage.GetData(), dbMeta)
 				scheduleMessage.Commit()
 			case publishMessage := <-publishChannel:
-				go publishCollection(publishMessage, fileProducer.Output, deleteProducer.Output, totalProducer.Output)
+				go publishCollection(publishMessage, fileProducer.Output(), deleteProducer.Output(), totalProducer.Output())
 			case <-healthChannel:
-			case errorMessage := <-scheduleConsumer.Errors:
+			case errorMessage := <-scheduleConsumer.Errors():
 				log.Error(fmt.Errorf("Aborting"), log.Data{"messageReceived": errorMessage})
+				scheduleConsumer.Closer() <- true
 				exitChannel <- true
 				return
 			}

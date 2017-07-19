@@ -108,14 +108,14 @@ func main() {
 	producer := kafka.NewProducer(brokers, producerTopic, 0)
 	for {
 		select {
-		case consumerMessage := <-consumer.Incoming:
-			if err := publishDelete(consumerMessage.GetData(), deleteStatement, elasticClient, producer.Output); err != nil {
+		case consumerMessage := <-consumer.Incoming():
+			if err := publishDelete(consumerMessage.GetData(), deleteStatement, elasticClient, producer.Output()); err != nil {
 				log.Error(err, nil)
 				panic(err)
 			} else {
 				consumerMessage.Commit()
 			}
-		case errorMessage := <-consumer.Errors:
+		case errorMessage := <-consumer.Errors():
 			log.Error(fmt.Errorf("Aborting: %+v", errorMessage), nil)
 			panic("got consumer error")
 		case <-healthChannel:
