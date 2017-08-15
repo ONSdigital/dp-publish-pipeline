@@ -3,34 +3,40 @@
 	"ignore": "test",
 	"package": [
 		{
-			"checksumSHA1": "hIujVNsNUItyBNjU2MMYMSc3T3U=",
+			"checksumSHA1": "dF3c6fF99+C/Y09aqUqJ9ouiHPE=",
+			"path": "github.com/ONSdigital/go-ns/kafka",
+			"revision": "c493b1568574c9720d7805f23ce6271ac445dc57",
+			"revisionTime": "2017-07-28T08:24:17Z"
+		},
+		{
+			"checksumSHA1": "AjbjbhFVAOP/1NU5HL+uy+X/yJo=",
 			"path": "github.com/ONSdigital/go-ns/log",
-			"revision": "0b92020de072d989d40655e3eda1a9f1bc218ebd",
-			"revisionTime": "2017-05-19T10:04:36Z"
+			"revision": "c493b1568574c9720d7805f23ce6271ac445dc57",
+			"revisionTime": "2017-07-28T08:24:17Z"
 		},
 		{
-			"checksumSHA1": "50/2Bv2EHsoyhrd7ddZKIFMIkoo=",
+			"checksumSHA1": "jjK8/P0gc4Sk5rXNx5e3qZrEqOo=",
 			"path": "github.com/Shopify/sarama",
-			"revision": "c01858abb625b73a3af51d0798e4ad42c8147093",
-			"revisionTime": "2017-05-08T18:36:27Z"
+			"revision": "3fee590c5568849516741670af9331a193bbe2a3",
+			"revisionTime": "2017-08-14T12:50:27Z"
 		},
 		{
-			"checksumSHA1": "umXxyjOWk2aQKrvTqRsYJypuhlw=",
+			"checksumSHA1": "okGXrwd9u2BIWm7yo5fopfMiOuI=",
 			"path": "github.com/bsm/sarama-cluster",
-			"revision": "045a96d0acad1692fa63ca3cfb15c452115516ae",
-			"revisionTime": "2017-04-20T12:56:59Z"
+			"revision": "f1ef2fda9bccc377dad24d7f7522d46b6a9a817b",
+			"revisionTime": "2017-07-31T13:08:41Z"
 		},
 		{
-			"checksumSHA1": "dvabztWVQX8f6oMLRyv4dLH+TGY=",
+			"checksumSHA1": "mrz/kicZiUaHxkyfvC/DyQcr8Do=",
 			"path": "github.com/davecgh/go-spew/spew",
-			"revision": "346938d642f2ec3594ed81d874461961cd0faa76",
-			"revisionTime": "2016-10-29T20:57:26Z"
+			"revision": "adab96458c51a58dc1783b3335dcce5461522e75",
+			"revisionTime": "2017-07-11T18:34:51Z"
 		},
 		{
 			"checksumSHA1": "y2Kh4iPlgCPXSGTCcFpzePYdzzg=",
 			"path": "github.com/eapache/go-resiliency/breaker",
-			"revision": "b86b1ec0dd4209a588dc1285cdd471e73525c0b3",
-			"revisionTime": "2016-01-04T19:15:39Z"
+			"revision": "b1fe83b5b03f624450823b751b662259ffc6af70",
+			"revisionTime": "2017-06-07T16:36:15Z"
 		},
 		{
 			"checksumSHA1": "WHl96RVZlOOdF4Lb1OOadMpw8ls=",
@@ -58,10 +64,16 @@
 			"revisionTime": "2017-05-19T02:37:13Z"
 		},
 		{
-			"checksumSHA1": "W+E/2xXcE1GmJ0Qb784ald0Fn6I=",
+			"checksumSHA1": "p/8vSviYF91gFflhrt5vkyksroo=",
 			"path": "github.com/golang/snappy",
-			"revision": "d9eb7a3d35ec988b8585d4a0068e462c27d28380",
-			"revisionTime": "2016-05-29T05:00:41Z"
+			"revision": "553a641470496b2327abcac10b36396bd98e45c9",
+			"revisionTime": "2017-02-15T23:32:05Z"
+		},
+		{
+			"checksumSHA1": "yIkYzW7bzAD81zHyuCNmEj4+oxQ=",
+			"path": "github.com/gopherjs/gopherjs/js",
+			"revision": "2b1d432c8a82c9bff0b0baffaeb3ec6e92974112",
+			"revisionTime": "2017-07-02T15:34:43Z"
 		},
 		{
 			"checksumSHA1": "cdOCt0Yb+hdErz8NAQqayxPmRsY=",
@@ -194,8 +206,8 @@
 			"checksumSHA1": "hBgLmZ/4mCxmnH88mqFKBkpJFUY=",
 			"origin": "github.com/ONSdigital/go-ns/vendor/github.com/mgutz/ansi",
 			"path": "github.com/mgutz/ansi",
-			"revision": "0b92020de072d989d40655e3eda1a9f1bc218ebd",
-			"revisionTime": "2017-05-19T10:04:36Z"
+			"revision": "c493b1568574c9720d7805f23ce6271ac445dc57",
+			"revisionTime": "2017-07-28T08:24:17Z"
 		},
 		{
 			"checksumSHA1": "q8VfSvQ6fZY+QwtlMPtQsJrNews=",
@@ -260,16 +272,16 @@
 			"revisionTime": "2017-05-22T00:17:29Z"
 		},
 		{
-			"checksumSHA1": "oaXvjFg802gS/wx1bx2gAQwa7XQ=",
+			"checksumSHA1": "FGg99nQ56Fo3radSCuU1AeEUJug=",
 			"path": "github.com/pierrec/lz4",
-			"revision": "ed384a0ef355ee01915875486e8c245ebd567527",
-			"revisionTime": "2016-10-17T07:52:17Z"
+			"revision": "5a3d2245f97fc249850e7802e3c01fad02a1c316",
+			"revisionTime": "2017-05-19T17:06:25Z"
 		},
 		{
-			"checksumSHA1": "IT4sX58d+e8osXHV5U6YCSdB/uE=",
+			"checksumSHA1": "zPWRjzsPeXCoqmidIcJtHbvrvRs=",
 			"path": "github.com/pierrec/xxHash/xxHash32",
-			"revision": "5a004441f897722c627870a981d02b29924215fa",
-			"revisionTime": "2016-01-12T16:53:51Z"
+			"revision": "a0006b13c722f7f12368c00a3d3c2ae8a999a0c6",
+			"revisionTime": "2017-07-14T08:24:55Z"
 		},
 		{
 			"checksumSHA1": "rJab1YdNhQooDiBWNnt7TLWPyBU=",
