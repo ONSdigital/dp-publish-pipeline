@@ -105,7 +105,12 @@ func main() {
 		log.Error(err, nil)
 		panic(err)
 	}
-	producer := kafka.NewProducer(brokers, producerTopic, 0)
+	producer, err := kafka.NewProducer(brokers, producerTopic, 0)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": producerTopic})
+		panic("Could not obtain producer")
+	}
+
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming():

@@ -140,7 +140,11 @@ func main() {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic(err)
 	}
-	producer := kafka.NewProducer(brokers, completeCollectionTopic, 0)
+	producer, err := kafka.NewProducer(brokers, completeCollectionTopic, 0)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": completeCollectionTopic})
+		panic("Could not obtain producer")
+	}
 
 	rateLimitFileCompletes := make(chan bool, maxConcurrentFileCompletes)
 	healthChannel := make(chan bool)

@@ -113,8 +113,17 @@ func main() {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic(err)
 	}
-	completeFileProducer := kafka.NewProducer(brokers, completeFileTopic, 0)
-	completeFileFlagProducer := kafka.NewProducer(brokers, completeFileFlagTopic, 0)
+	completeFileProducer, err := kafka.NewProducer(brokers, completeFileTopic, 0)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": completeFileTopic})
+		panic("Could not obtain producer")
+	}
+	completeFileFlagProducer, err := kafka.NewProducer(brokers, completeFileFlagTopic, 0)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": completeFileFlagTopic})
+		panic("Could not obtain producer")
+	}
+
 	for {
 		select {
 		case consumerMessage := <-consumer.Incoming():

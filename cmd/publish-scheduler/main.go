@@ -420,15 +420,26 @@ func main() {
 	log.Info(fmt.Sprintf("Starting publish scheduler topics: %q -> %q/%q/%q", scheduleTopic, produceFileTopic, produceDeleteTopic, produceTotalTopic), nil)
 
 	kafka.SetMaxMessageSize(int32(maxMessageSize))
-	totalProducer := kafka.NewProducer(brokers, produceTotalTopic, maxMessageSize)
+	totalProducer, err := kafka.NewProducer(brokers, produceTotalTopic, maxMessageSize)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": produceTotalTopic})
+		panic("Could not obtain producer")
+	}
 	scheduleConsumer, err := kafka.NewConsumerGroup(brokers, scheduleTopic, "publish-scheduler", kafka.OffsetNewest)
 	if err != nil {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic("Could not obtain consumer")
 	}
-	fileProducer := kafka.NewProducer(brokers, produceFileTopic, maxMessageSize)
-	deleteProducer := kafka.NewProducer(brokers, produceDeleteTopic, maxMessageSize)
-
+	fileProducer, err := kafka.NewProducer(brokers, produceFileTopic, maxMessageSize)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": produceFileTopic})
+		panic("Could not obtain producer")
+	}
+	deleteProducer, err := kafka.NewProducer(brokers, produceDeleteTopic, maxMessageSize)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": produceDeleteTopic})
+		panic("Could not obtain producer")
+	}
 	publishChannel := make(chan scheduleJob)
 	healthChannel := make(chan bool)
 	exitChannel := make(chan bool)

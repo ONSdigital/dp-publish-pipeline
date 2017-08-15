@@ -92,8 +92,16 @@ func main() {
 		log.ErrorC("Could not obtain consumer", err, nil)
 		panic(err)
 	}
-	fileProducer := kafka.NewProducer(brokers, completeFileTopic, 0)
-	flagProducer := kafka.NewProducer(brokers, completeFileFlagTopic, 0)
+	fileProducer, err := kafka.NewProducer(brokers, completeFileTopic, 0)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": completeFileTopic})
+		panic("Could not obtain producer")
+	}
+	flagProducer, err := kafka.NewProducer(brokers, completeFileFlagTopic, 0)
+	if err != nil {
+		log.ErrorC("Could not obtain producer", err, log.Data{"topic": completeFileFlagTopic})
+		panic("Could not obtain producer")
+	}
 
 	go func() {
 		http.HandleFunc(healthCheckEndpoint, health.NewHealthChecker(healthChannel, nil))
